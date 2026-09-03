@@ -37,6 +37,14 @@ are due to repeat the same practice next time they're placed in a
 detail. There is no automatic retry limit; a human always decides
 when to move a struggling cadet on (see manual override below).
 
+A cadet who has passed every configured practice does not stop being
+scheduled: their current practice resolves to the **final** practice
+in the sequence, indefinitely, and they continue to compete for lanes
+under the normal fairness rule alongside cadets still progressing.
+Each further firing of the final practice is recorded as its own
+attempt (see data model), so there is a full history of every time
+they fired it, not just the qualifying pass.
+
 ## Data model (SwiftData)
 
 ```
@@ -61,12 +69,14 @@ Lane
 Cadet
   id: UUID
   name: String
-  results: [CadetPracticeResult]   // one per attempted practice
+  attempts: [PracticeAttempt]      // full attempt history, one row per firing
   nextOverridePracticeID: UUID?    // one-shot manual override, cleared after use
 
-CadetPracticeResult
+PracticeAttempt
   practiceID: UUID
-  outcome: Outcome           // .notAttempted | .pass | .fail
+  detailID: UUID              // which detail this attempt was fired in
+  outcome: Outcome            // .pass | .fail
+  firedAt: Date
 
 Detail
   id: UUID
@@ -91,9 +101,10 @@ nextDetail(cadets, practices, lanes, history) -> DraftDetail
 ```
 
 1. Consider only lanes where `active == true`.
-2. For each cadet who has not passed every practice, resolve their
-   practice for this detail: their one-shot override if set,
-   otherwise their current practice per the progression rule.
+2. For each cadet, resolve their practice for this detail: their
+   one-shot override if set, otherwise their current practice per the
+   progression rule (which resolves to the final practice for cadets
+   who have completed progression).
 3. Group eligible cadets by resolved practice.
 4. Within each practice group, rank cadets by fairness: longest time
    since their last fired detail first, then fewest details fired
@@ -107,8 +118,10 @@ nextDetail(cadets, practices, lanes, history) -> DraftDetail
    state, roster, or results change — it is not a one-time
    suggestion, it is always "what would fire right now."
 
-A cadet who has passed every configured practice is excluded from
-scheduling for the rest of the session (marked complete).
+There is no separate "complete and excluded" state — a cadet who has
+passed every practice keeps cycling through step 5 on the final
+practice, same as any other cadet, and is only left idle if lanes run
+out (same as anyone else waiting).
 
 ## Detail lifecycle: draft, edit, confirm
 
@@ -132,7 +145,10 @@ editable before it is fired:
 
 After a detail is confirmed as fired, the RCO records pass/fail per
 lane. Entering a result:
-- Updates the cadet's `CadetPracticeResult` for that practice.
+- Sets the `outcome` on that `LaneAssignment`.
+- Appends a new `PracticeAttempt` to the cadet's history for that
+  practice (so repeat firings — including repeats of an
+  already-passed final practice — are all individually recorded).
 - Immediately triggers recomputation of the live draft "up next"
   detail (fairness/progression state has changed).
 
@@ -177,8 +193,10 @@ lane. Entering a result:
 - Reducing lane count, or toggling lanes out of commission, never
   alters already-fired `Detail` history — only affects future
   scheduling.
-- All cadets complete (passed every practice) → draft detail is
-  empty; UI shows a "session practices complete" state.
+- All cadets complete (passed every practice) → the draft detail is
+  not empty; every cadet resolves to the final practice and details
+  keep being generated as normal, one contiguous block on that
+  practice.
 
 ## Testing approach
 
@@ -191,7 +209,10 @@ thorough red-green unit tests first, covering:
 - Out-of-commission lane exclusion, including lanes toggled mid-
   session.
 - One-shot manual override consumption.
-- Completed-cadet exclusion.
+- Completed cadets (passed every practice) resolve to the final
+  practice and keep being scheduled, competing fairly with
+  still-progressing cadets, with each firing recorded as a separate
+  attempt.
 
 UI is smoke-tested manually in the running app (SwiftUI previews +
 manual exercise of Session Setup → Range View → confirm/results

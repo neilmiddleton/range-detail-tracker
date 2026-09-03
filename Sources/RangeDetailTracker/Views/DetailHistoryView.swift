@@ -12,19 +12,29 @@ struct DetailHistoryView: View {
             }
             ForEach(details) { detail in
                 DisclosureGroup("Detail \(detail.sequenceNumber)") {
-                    ForEach(detail.firings.sorted { $0.laneNumber < $1.laneNumber }) { firing in
-                        let cadetName = store.session.cadets.first { $0.id == firing.cadetID }?.name ?? "?"
-                        let practiceName = store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
-                        HStack {
-                            Text("Lane \(firing.laneNumber): \(cadetName) — \(practiceName)")
-                            Spacer()
-                            outcomeLabel(firing)
-                        }
+                    let firings = detail.firings.sorted { $0.laneNumber < $1.laneNumber }
+                    Table(firings) {
+                        TableColumn("Lane") { firing in Text("\(firing.laneNumber)") }
+                        TableColumn("Cadet") { firing in Text(cadetName(for: firing)) }
+                        TableColumn("Practice") { firing in Text(practiceName(for: firing)) }
+                        TableColumn("Score") { firing in Text(firing.score.map(String.init) ?? "") }
+                        TableColumn("ES") { firing in Text(firing.esScore.map(String.init) ?? "") }
+                        TableColumn("PV") { firing in Text(firing.pvScore.map(String.init) ?? "") }
+                        TableColumn("Outcome") { firing in outcomeLabel(firing) }
                     }
+                    .frame(minHeight: CGFloat(firings.count) * 28 + 30)
                 }
             }
         }
         .padding()
+    }
+
+    private func cadetName(for firing: Firing) -> String {
+        store.session.cadets.first { $0.id == firing.cadetID }?.name ?? "?"
+    }
+
+    private func practiceName(for firing: Firing) -> String {
+        store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
     }
 
     @ViewBuilder

@@ -47,6 +47,11 @@ Pass/fail is always derived from the recorded score(s) against the
 practice's configured pass mark(s) — the RCO enters scores, never a
 pass/fail judgement directly.
 
+A recorded score of `0` is treated as "not actually fired" (invalid),
+not a valid low score — it always fails, regardless of the pass mark.
+For zeroing, this applies per-side: an ES or PV score of `0` fails
+that practice even if the other side would otherwise pass.
+
 ## Progression rule
 
 A cadet's **current practice** is the first practice (in configured

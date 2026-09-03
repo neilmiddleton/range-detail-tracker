@@ -21,5 +21,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("FairnessRankingTests") {
+        for (name, method) in FairnessRankingTests.allTests {
+            TestRunner.shared.run(name) { try method(FairnessRankingTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

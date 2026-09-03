@@ -12,10 +12,35 @@ struct DraftDetailPanelView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(draft.firings.sorted { $0.laneNumber < $1.laneNumber }) { firing in
-                    if let cadetID = firing.cadetID, let practiceID = firing.practiceID {
-                        let cadetName = store.session.cadets.first { $0.id == cadetID }?.name ?? "?"
-                        let practiceName = store.session.practices.first { $0.id == practiceID }?.name ?? "?"
-                        Text("Lane \(firing.laneNumber): \(cadetName) — \(practiceName)")
+                    HStack {
+                        Text("Lane \(firing.laneNumber)").frame(width: 60, alignment: .leading)
+
+                        Picker("Cadet", selection: Binding(
+                            get: { firing.cadetID },
+                            set: { newCadetID in
+                                store.editDraftLane(firing.laneNumber, cadetID: newCadetID, practiceID: firing.practiceID ?? store.session.practices.first?.id)
+                            }
+                        )) {
+                            Text("— Idle —").tag(UUID?.none)
+                            ForEach(store.session.cadets.sorted { $0.name < $1.name }) { cadet in
+                                Text(cadet.name).tag(Optional(cadet.id))
+                            }
+                        }
+                        .labelsHidden()
+
+                        Picker("Practice", selection: Binding(
+                            get: { firing.practiceID },
+                            set: { newPracticeID in
+                                store.editDraftLane(firing.laneNumber, cadetID: firing.cadetID, practiceID: newPracticeID)
+                            }
+                        )) {
+                            Text("—").tag(UUID?.none)
+                            ForEach(store.session.practices.sorted { $0.order < $1.order }) { practice in
+                                Text(practice.name).tag(Optional(practice.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .disabled(firing.cadetID == nil)
                     }
                 }
             }

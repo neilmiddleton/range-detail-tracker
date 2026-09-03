@@ -33,5 +33,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("SessionStoreTests") {
+        for (name, method) in SessionStoreTests.allTests {
+            TestRunner.shared.run(name) { try method(SessionStoreTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

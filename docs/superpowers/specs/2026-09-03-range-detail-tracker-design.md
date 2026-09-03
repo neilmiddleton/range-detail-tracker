@@ -63,7 +63,7 @@ Each further firing of the final practice is recorded as its own
 attempt (see data model), so there is a full history of every time
 they fired it, not just the qualifying pass.
 
-## Data model (SwiftData)
+## Data model (Codable, JSON-file persisted)
 
 ```
 Session
@@ -113,7 +113,7 @@ Firing
 
 ## Detail generation algorithm
 
-A pure function, independent of SwiftData and UI, so it can be unit
+A pure function, independent of persistence and UI, so it can be unit
 tested directly:
 
 ```
@@ -219,7 +219,12 @@ practice — so the full history feeds the butt register.
 
 ## Persistence
 
-- SwiftData, autosaved on every change — no explicit save action.
+- The whole session is written to a single local JSON file after every
+  change, no explicit save action. (The original design specified
+  SwiftData; that was changed during implementation because SwiftData's
+  `@Model` macro requires a full Xcode install, which is unavailable in
+  this environment — see the implementation plan's Environment note.
+  The behaviour — local-only, autosaved on every change — is unchanged.)
 - All app data is local-only (no network, no sync).
 
 ## Edge cases

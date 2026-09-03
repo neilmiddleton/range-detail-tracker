@@ -4,15 +4,17 @@
 
 **Goal:** Build a native Mac app that tracks progressive shooting practices on an air cadets range — proposing the next detail (which practice, which cadets, which lanes), recording scores, and producing a butt register at the end of the session.
 
-**Architecture:** SwiftUI + SwiftData, built as a Swift Package Manager executable app (no `.xcodeproj`, no external dependencies). A pure, SwiftData-independent domain layer (`Domain/`) implements progression, scoring, fairness, and detail-generation as plain functions over value types — this is what gets thorough unit tests. SwiftData `@Model` classes (`Models/`) handle persistence only. A `SessionStore` bridges the two: it reads SwiftData models into domain snapshots, calls the pure functions, and writes results back. SwiftUI views are thin and manually smoke-tested, per the spec's testing approach.
+**Architecture:** SwiftUI, built as a Swift Package Manager executable app (no `.xcodeproj`, no external dependencies). A pure, dependency-free domain layer (`Domain/`) implements progression, scoring, fairness, and detail-generation as plain functions over value types — this is what gets thorough unit tests. Plain `@Observable` model classes (`Models/`), each conforming to `Codable` by hand, hold the session's state in memory and serialize to a single JSON file on disk. A `SessionStore` bridges the two: it reads the in-memory models into domain snapshots, calls the pure functions, mutates the models, and persists the whole session to disk after every change. SwiftUI views are thin and manually smoke-tested, per the spec's testing approach.
 
-**Tech Stack:** Swift 5.10+, SwiftUI, SwiftData, XCTest, macOS 14+ (`.v14` platform minimum, required for SwiftData).
+> **Environment note:** the original design used SwiftData (`@Model`). That macro's implementation ships only inside Xcode.app, not with Xcode Command Line Tools, and this machine has no Xcode installed and cannot install it — `swift build`/`swift test` fail with "external macro implementation type ... could not be found" under Command Line Tools alone (confirmed by spiking `@Observable`, which is a different, open-source Swift macro and builds fine standalone, isolating the failure to SwiftData specifically). Persistence was therefore redesigned around hand-written `Codable` conformance and `@Observable` for UI reactivity — both work under Command Line Tools alone — with a single JSON file on disk standing in for SwiftData's store. Nothing else in the spec (progression, scoring, fairness, detail generation, screens) changes.
+
+**Tech Stack:** Swift 5.10+, SwiftUI, Observation, Foundation (JSON persistence), XCTest, macOS 14+ (`.v14` platform minimum, required for the Observation framework's `@Observable` macro).
 
 **Spec:** `docs/superpowers/specs/2026-09-03-range-detail-tracker-design.md`
 
 ## Global Constraints
 
-- macOS native app: SwiftUI + SwiftData only. No third-party dependencies — SPM executable target, no external packages added.
+- macOS native app: SwiftUI + hand-written `Codable` models + `@Observable`, no persistence framework. No third-party dependencies — SPM executable target, no external packages added.
 - Lane count is configurable per session, 1–10.
 - Practices are configured fresh each session (no cross-session templates), each with an explicit order, free-form name, and a scoring type.
 - Progression: a cadet's current practice is the first practice in order they have not passed; a fail repeats the same practice; a cadet cannot skip ahead.
@@ -24,7 +26,7 @@
 - Scoring: **standard** practices take one score compared to a configured pass mark; **zeroing** practices take ES and PV scores, each compared to its own pass mark — both must pass for the practice to pass.
 - Pass/fail is always derived from recorded score(s), never entered directly.
 - Every firing (including repeats of an already-passed final practice) is recorded individually — no overwriting — to feed the butt register.
-- Persistence is local-only; SwiftData autosaves on every change, no explicit save action.
+- Persistence is local-only; the current session is written to a single JSON file after every change (`SessionPersistence`), no explicit save action.
 - Butt register: on-screen table ordered by detail, plus CSV export.
 
 ---
@@ -34,16 +36,16 @@
 ```
 Package.swift
 Sources/RangeDetailTracker/
-  RangeDetailTrackerApp.swift          // @main, SwiftData ModelContainer, root view
+  RangeDetailTrackerApp.swift          // @main, root view
   Models/
     ScoringType.swift                  // enum, shared by Models and Domain
     Outcome.swift                      // enum, shared by Models and Domain
-    Session.swift                      // @Model
-    Practice.swift                     // @Model
-    Lane.swift                         // @Model
-    Cadet.swift                        // @Model
-    Detail.swift                       // @Model
-    Firing.swift                       // @Model
+    Session.swift                      // @Observable, Codable
+    Practice.swift                     // @Observable, Codable
+    Lane.swift                         // @Observable, Codable
+    Cadet.swift                        // @Observable, Codable
+    Detail.swift                       // @Observable, Codable
+    Firing.swift                       // @Observable, Codable
   Domain/
     PracticeSnapshot.swift
     CadetSnapshot.swift
@@ -58,7 +60,8 @@ Sources/RangeDetailTracker/
     ButtRegisterBuilder.swift          // pure: Session -> [ButtRegisterRow]
     ButtRegisterCSVExporter.swift      // pure: [ButtRegisterRow] -> CSV String
   Store/
-    SessionStore.swift                 // SwiftData <-> Domain bridge, @Observable
+    SessionPersistence.swift           // save/load Session as a single JSON file
+    SessionStore.swift                 // Models <-> Domain bridge, @Observable
   Views/
     SessionSetupView.swift
     RangeView.swift
@@ -80,7 +83,7 @@ Tests/RangeDetailTrackerTests/
 
 ---
 
-### Task 1: Project scaffold and SwiftData models
+### Task 1: Project scaffold and model classes
 
 **Files:**
 - Create: `Package.swift`
@@ -97,7 +100,7 @@ Tests/RangeDetailTrackerTests/
 
 **Interfaces:**
 - Produces: `ScoringType` (`.standard`, `.zeroing`), `Outcome` (`.pass`, `.fail`) — used by every later task.
-- Produces: `Session`, `Practice`, `Lane`, `Cadet`, `Detail`, `Firing` SwiftData model classes, each with `id: UUID` (except `Lane`, keyed by `number`), used by `SessionStore` (Task 6) and all views.
+- Produces: `Session`, `Practice`, `Lane`, `Cadet`, `Detail`, `Firing` — plain `@Observable` reference types, each conforming to `Codable` by hand (an explicit `init(from:)`/`encode(to:)`, NOT relying on synthesis — `@Observable` rewrites stored properties, which breaks compiler-synthesized `Codable` and produces a "does not conform to Decodable" error; write the coding methods exactly as shown below). Each has `id: UUID` (except `Lane`, whose `id` is a computed `Int` equal to `number`), used by `SessionStore` (Task 6) and all views. These are a plain owned tree (`Session` holds arrays of the rest) — no back-pointers, no relationship framework.
 
 - [ ] **Step 1: Create the package manifest**
 
@@ -141,15 +144,15 @@ enum Outcome: String, Codable {
 }
 ```
 
-- [ ] **Step 3: Write the SwiftData models**
+- [ ] **Step 3: Write the model classes**
 
 `Sources/RangeDetailTracker/Models/Practice.swift`:
 ```swift
 import Foundation
-import SwiftData
+import Observation
 
-@Model
-final class Practice {
+@Observable
+final class Practice: Codable, Identifiable {
     var id: UUID
     var name: String
     var order: Int
@@ -157,7 +160,6 @@ final class Practice {
     var passMark: Int?
     var esPassMark: Int?
     var pvPassMark: Int?
-    var session: Session?
 
     init(
         id: UUID = UUID(),
@@ -176,22 +178,64 @@ final class Practice {
         self.esPassMark = esPassMark
         self.pvPassMark = pvPassMark
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, order, scoringType, passMark, esPassMark, pvPassMark
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        order = try container.decode(Int.self, forKey: .order)
+        scoringType = try container.decode(ScoringType.self, forKey: .scoringType)
+        passMark = try container.decodeIfPresent(Int.self, forKey: .passMark)
+        esPassMark = try container.decodeIfPresent(Int.self, forKey: .esPassMark)
+        pvPassMark = try container.decodeIfPresent(Int.self, forKey: .pvPassMark)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(order, forKey: .order)
+        try container.encode(scoringType, forKey: .scoringType)
+        try container.encodeIfPresent(passMark, forKey: .passMark)
+        try container.encodeIfPresent(esPassMark, forKey: .esPassMark)
+        try container.encodeIfPresent(pvPassMark, forKey: .pvPassMark)
+    }
 }
 ```
 
 `Sources/RangeDetailTracker/Models/Lane.swift`:
 ```swift
-import SwiftData
+import Observation
 
-@Model
-final class Lane {
+@Observable
+final class Lane: Codable, Identifiable {
+    var id: Int { number }
     var number: Int
     var active: Bool
-    var session: Session?
 
     init(number: Int, active: Bool = true) {
         self.number = number
         self.active = active
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case number, active
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        number = try container.decode(Int.self, forKey: .number)
+        active = try container.decode(Bool.self, forKey: .active)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(number, forKey: .number)
+        try container.encode(active, forKey: .active)
     }
 }
 ```
@@ -199,18 +243,35 @@ final class Lane {
 `Sources/RangeDetailTracker/Models/Cadet.swift`:
 ```swift
 import Foundation
-import SwiftData
+import Observation
 
-@Model
-final class Cadet {
+@Observable
+final class Cadet: Codable, Identifiable {
     var id: UUID
     var name: String
     var nextOverridePracticeID: UUID?
-    var session: Session?
 
     init(id: UUID = UUID(), name: String) {
         self.id = id
         self.name = name
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, nextOverridePracticeID
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        nextOverridePracticeID = try container.decodeIfPresent(UUID.self, forKey: .nextOverridePracticeID)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(nextOverridePracticeID, forKey: .nextOverridePracticeID)
     }
 }
 ```
@@ -218,10 +279,10 @@ final class Cadet {
 `Sources/RangeDetailTracker/Models/Firing.swift`:
 ```swift
 import Foundation
-import SwiftData
+import Observation
 
-@Model
-final class Firing {
+@Observable
+final class Firing: Codable, Identifiable {
     var id: UUID
     var laneNumber: Int
     var cadetID: UUID
@@ -230,7 +291,6 @@ final class Firing {
     var esScore: Int?
     var pvScore: Int?
     var outcome: Outcome?
-    var detail: Detail?
 
     init(id: UUID = UUID(), laneNumber: Int, cadetID: UUID, practiceID: UUID) {
         self.id = id
@@ -238,22 +298,48 @@ final class Firing {
         self.cadetID = cadetID
         self.practiceID = practiceID
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, laneNumber, cadetID, practiceID, score, esScore, pvScore, outcome
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        laneNumber = try container.decode(Int.self, forKey: .laneNumber)
+        cadetID = try container.decode(UUID.self, forKey: .cadetID)
+        practiceID = try container.decode(UUID.self, forKey: .practiceID)
+        score = try container.decodeIfPresent(Int.self, forKey: .score)
+        esScore = try container.decodeIfPresent(Int.self, forKey: .esScore)
+        pvScore = try container.decodeIfPresent(Int.self, forKey: .pvScore)
+        outcome = try container.decodeIfPresent(Outcome.self, forKey: .outcome)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(laneNumber, forKey: .laneNumber)
+        try container.encode(cadetID, forKey: .cadetID)
+        try container.encode(practiceID, forKey: .practiceID)
+        try container.encodeIfPresent(score, forKey: .score)
+        try container.encodeIfPresent(esScore, forKey: .esScore)
+        try container.encodeIfPresent(pvScore, forKey: .pvScore)
+        try container.encodeIfPresent(outcome, forKey: .outcome)
+    }
 }
 ```
 
 `Sources/RangeDetailTracker/Models/Detail.swift`:
 ```swift
 import Foundation
-import SwiftData
+import Observation
 
-@Model
-final class Detail {
+@Observable
+final class Detail: Codable, Identifiable {
     var id: UUID
     var sequenceNumber: Int
     var firedAt: Date
-    @Relationship(deleteRule: .cascade, inverse: \Firing.detail)
     var firings: [Firing]
-    var session: Session?
 
     init(id: UUID = UUID(), sequenceNumber: Int, firedAt: Date = .now) {
         self.id = id
@@ -261,26 +347,42 @@ final class Detail {
         self.firedAt = firedAt
         self.firings = []
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, sequenceNumber, firedAt, firings
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        sequenceNumber = try container.decode(Int.self, forKey: .sequenceNumber)
+        firedAt = try container.decode(Date.self, forKey: .firedAt)
+        firings = try container.decode([Firing].self, forKey: .firings)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(sequenceNumber, forKey: .sequenceNumber)
+        try container.encode(firedAt, forKey: .firedAt)
+        try container.encode(firings, forKey: .firings)
+    }
 }
 ```
 
 `Sources/RangeDetailTracker/Models/Session.swift`:
 ```swift
 import Foundation
-import SwiftData
+import Observation
 
-@Model
-final class Session {
+@Observable
+final class Session: Codable, Identifiable {
     var id: UUID
     var date: Date
     var laneCount: Int
-    @Relationship(deleteRule: .cascade, inverse: \Practice.session)
     var practices: [Practice]
-    @Relationship(deleteRule: .cascade, inverse: \Cadet.session)
     var cadets: [Cadet]
-    @Relationship(deleteRule: .cascade, inverse: \Lane.session)
     var lanes: [Lane]
-    @Relationship(deleteRule: .cascade, inverse: \Detail.session)
     var details: [Detail]
 
     init(id: UUID = UUID(), date: Date = .now, laneCount: Int) {
@@ -292,6 +394,32 @@ final class Session {
         self.lanes = []
         self.details = []
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, date, laneCount, practices, cadets, lanes, details
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        date = try container.decode(Date.self, forKey: .date)
+        laneCount = try container.decode(Int.self, forKey: .laneCount)
+        practices = try container.decode([Practice].self, forKey: .practices)
+        cadets = try container.decode([Cadet].self, forKey: .cadets)
+        lanes = try container.decode([Lane].self, forKey: .lanes)
+        details = try container.decode([Detail].self, forKey: .details)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(date, forKey: .date)
+        try container.encode(laneCount, forKey: .laneCount)
+        try container.encode(practices, forKey: .practices)
+        try container.encode(cadets, forKey: .cadets)
+        try container.encode(lanes, forKey: .lanes)
+        try container.encode(details, forKey: .details)
+    }
 }
 ```
 
@@ -300,7 +428,6 @@ final class Session {
 `Sources/RangeDetailTracker/RangeDetailTrackerApp.swift`:
 ```swift
 import SwiftUI
-import SwiftData
 
 @main
 struct RangeDetailTrackerApp: App {
@@ -309,9 +436,6 @@ struct RangeDetailTrackerApp: App {
             Text("Range Detail Tracker")
                 .padding()
         }
-        .modelContainer(for: [
-            Session.self, Practice.self, Lane.self, Cadet.self, Detail.self, Firing.self,
-        ])
     }
 }
 ```
@@ -321,16 +445,10 @@ struct RangeDetailTrackerApp: App {
 `Tests/RangeDetailTrackerTests/ModelPersistenceTests.swift`:
 ```swift
 import XCTest
-import SwiftData
 @testable import RangeDetailTracker
 
 final class ModelPersistenceTests: XCTestCase {
-    func testModelsPersistAndFetchInMemory() throws {
-        let schema = Schema([Session.self, Practice.self, Lane.self, Cadet.self, Detail.self, Firing.self])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-        let context = ModelContext(container)
-
+    func testSessionRoundTripsThroughJSON() throws {
         let session = Session(laneCount: 5)
         let practice = Practice(name: "GP1", order: 0, scoringType: .standard, passMark: 20)
         let lane = Lane(number: 1)
@@ -338,13 +456,15 @@ final class ModelPersistenceTests: XCTestCase {
         session.practices.append(practice)
         session.lanes.append(lane)
         session.cadets.append(cadet)
-        context.insert(session)
-        try context.save()
 
-        let fetched = try context.fetch(FetchDescriptor<Session>())
-        XCTAssertEqual(fetched.count, 1)
-        XCTAssertEqual(fetched.first?.practices.count, 1)
-        XCTAssertEqual(fetched.first?.lanes.first?.number, 1)
+        let data = try JSONEncoder().encode(session)
+        let decoded = try JSONDecoder().decode(Session.self, from: data)
+
+        XCTAssertEqual(decoded.laneCount, 5)
+        XCTAssertEqual(decoded.practices.count, 1)
+        XCTAssertEqual(decoded.practices.first?.name, "GP1")
+        XCTAssertEqual(decoded.lanes.first?.number, 1)
+        XCTAssertEqual(decoded.cadets.first?.name, "Test Cadet")
     }
 }
 ```
@@ -352,13 +472,13 @@ final class ModelPersistenceTests: XCTestCase {
 - [ ] **Step 6: Run the test to verify the project builds and the test passes**
 
 Run: `swift test --filter ModelPersistenceTests`
-Expected: PASS (this is scaffolding, not red/green — first run should already pass since the models are written; the point of running it is confirming the package builds and SwiftData schema is valid).
+Expected: PASS (this is scaffolding, not red/green — first run should already pass since the models are written; the point of running it is confirming the package builds and every model round-trips through `JSONEncoder`/`JSONDecoder` correctly, including the `@Observable` + hand-written `Codable` combination).
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add Package.swift Sources Tests
-git commit -m "Scaffold SPM app and SwiftData models"
+git commit -m "Scaffold SPM app and Codable/Observable model classes"
 ```
 
 ---
@@ -903,31 +1023,53 @@ git commit -m "Add draft detail generator: contiguous per-practice lane filling"
 
 ---
 
-### Task 6: Session store (SwiftData bridge)
+### Task 6: Session store (JSON persistence bridge)
 
 **Files:**
+- Create: `Sources/RangeDetailTracker/Store/SessionPersistence.swift`
 - Create: `Sources/RangeDetailTracker/Store/SessionStore.swift`
 - Test: `Tests/RangeDetailTrackerTests/SessionStoreTests.swift`
 
 **Interfaces:**
 - Consumes: `Session`, `Practice`, `Lane`, `Cadet`, `Detail`, `Firing` (Task 1), all `Domain` types and `DraftDetailGenerator.nextDetail`, `ScoringRule.outcome` (Tasks 2–5).
-- Produces: `SessionStore` with `draftDetail: DraftDetail`, `displayedDraft: DraftDetail`, `confirmDraft()`, `editDraftLane(_:cadetID:practiceID:)`, `recordScore(firing:score:esScore:pvScore:)`, `toggleLane(_:)`, `setOverride(cadetID:practiceID:)` — used by all Views (Tasks 7–13).
+- Produces: `SessionPersistence.fileURL() -> URL`, `SessionPersistence.save(_ session: Session)`, `SessionPersistence.load() -> Session?`. Produces `SessionStore` with `init(session:persist:)` (`persist` defaults to `SessionPersistence.save`), `draftDetail: DraftDetail`, `displayedDraft: DraftDetail`, `confirmDraft()`, `editDraftLane(_:cadetID:practiceID:)`, `recordScore(firing:score:esScore:pvScore:)`, `toggleLane(_:)`, `setOverride(cadetID:practiceID:)` — used by all Views (Tasks 7–13).
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the persistence helper**
+
+`Sources/RangeDetailTracker/Store/SessionPersistence.swift`:
+```swift
+import Foundation
+
+enum SessionPersistence {
+    static func fileURL() -> URL {
+        let directory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RangeDetailTracker", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("current-session.json")
+    }
+
+    static func save(_ session: Session) {
+        guard let data = try? JSONEncoder().encode(session) else { return }
+        try? data.write(to: fileURL(), options: .atomic)
+    }
+
+    static func load() -> Session? {
+        guard let data = try? Data(contentsOf: fileURL()) else { return nil }
+        return try? JSONDecoder().decode(Session.self, from: data)
+    }
+}
+```
+
+- [ ] **Step 2: Write the failing tests**
 
 `Tests/RangeDetailTrackerTests/SessionStoreTests.swift`:
 ```swift
 import XCTest
-import SwiftData
 @testable import RangeDetailTracker
 
 final class SessionStoreTests: XCTestCase {
-    func makeStore(laneCount: Int = 2) throws -> (store: SessionStore, practice: Practice) {
-        let schema = Schema([Session.self, Practice.self, Lane.self, Cadet.self, Detail.self, Firing.self])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-        let context = ModelContext(container)
-
+    func makeStore(laneCount: Int = 2) -> (store: SessionStore, practice: Practice) {
         let session = Session(laneCount: laneCount)
         let practice = Practice(name: "AR1", order: 0, scoringType: .standard, passMark: 20)
         session.practices.append(practice)
@@ -935,14 +1077,11 @@ final class SessionStoreTests: XCTestCase {
             session.lanes.append(Lane(number: number))
         }
         session.cadets.append(Cadet(name: "Cadet A"))
-        context.insert(session)
-        try context.save()
-
-        return (SessionStore(context: context, session: session), practice)
+        return (SessionStore(session: session, persist: { _ in }), practice)
     }
 
     func testConfirmDraftCreatesDetailWithFirings() throws {
-        let (store, _) = try makeStore(laneCount: 1)
+        let (store, _) = makeStore(laneCount: 1)
         XCTAssertEqual(store.session.details.count, 0)
         store.confirmDraft()
         XCTAssertEqual(store.session.details.count, 1)
@@ -950,7 +1089,7 @@ final class SessionStoreTests: XCTestCase {
     }
 
     func testRecordScoreSetsDerivedOutcome() throws {
-        let (store, _) = try makeStore(laneCount: 1)
+        let (store, _) = makeStore(laneCount: 1)
         store.confirmDraft()
         let firing = try XCTUnwrap(store.session.details.first?.firings.first)
         store.recordScore(firing: firing, score: 25, esScore: nil, pvScore: nil)
@@ -958,13 +1097,13 @@ final class SessionStoreTests: XCTestCase {
     }
 
     func testToggleLaneRemovesLaneFromDraft() throws {
-        let (store, _) = try makeStore(laneCount: 2)
+        let (store, _) = makeStore(laneCount: 2)
         store.toggleLane(2)
         XCTAssertEqual(store.draftDetail.firings.map(\.laneNumber), [1])
     }
 
     func testConfirmDraftClearsConsumedOverride() throws {
-        let (store, practice) = try makeStore(laneCount: 1)
+        let (store, practice) = makeStore(laneCount: 1)
         let cadet = try XCTUnwrap(store.session.cadets.first)
         store.setOverride(cadetID: cadet.id, practiceID: practice.id)
         XCTAssertEqual(cadet.nextOverridePracticeID, practice.id)
@@ -973,7 +1112,7 @@ final class SessionStoreTests: XCTestCase {
     }
 
     func testEditDraftLaneOverridesForNextConfirmOnly() throws {
-        let (store, _) = try makeStore(laneCount: 1)
+        let (store, _) = makeStore(laneCount: 1)
         store.editDraftLane(1, cadetID: nil, practiceID: nil)
         XCTAssertNil(store.displayedDraft.firings.first?.cadetID)
         store.confirmDraft()
@@ -981,31 +1120,39 @@ final class SessionStoreTests: XCTestCase {
         // Edits are one-shot: the next draft is computed fresh, not from the edited state.
         XCTAssertNotNil(store.draftDetail.firings.first?.cadetID)
     }
+
+    func testPersistIsCalledOnEveryMutation() throws {
+        let session = Session(laneCount: 1)
+        session.lanes.append(Lane(number: 1))
+        var savedCount = 0
+        let store = SessionStore(session: session, persist: { _ in savedCount += 1 })
+        store.toggleLane(1)
+        XCTAssertEqual(savedCount, 1)
+    }
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
 Run: `swift test --filter SessionStoreTests`
 Expected: FAIL to compile — `SessionStore` not defined.
 
-- [ ] **Step 3: Write the minimal implementation**
+- [ ] **Step 4: Write the minimal implementation**
 
 `Sources/RangeDetailTracker/Store/SessionStore.swift`:
 ```swift
 import Foundation
 import Observation
-import SwiftData
 
 @Observable
 final class SessionStore {
-    private let context: ModelContext
     let session: Session
+    private let persist: (Session) -> Void
     private var manualEdits: [Int: DraftFiring] = [:]
 
-    init(context: ModelContext, session: Session) {
-        self.context = context
+    init(session: Session, persist: @escaping (Session) -> Void = SessionPersistence.save) {
         self.session = session
+        self.persist = persist
     }
 
     private var practiceSnapshots: [PracticeSnapshot] {
@@ -1055,7 +1202,7 @@ final class SessionStore {
         session.details.append(detail)
         clearConsumedOverrides(for: detail)
         manualEdits.removeAll()
-        try? context.save()
+        persist(session)
     }
 
     private func clearConsumedOverrides(for detail: Detail) {
@@ -1072,38 +1219,38 @@ final class SessionStore {
         firing.pvScore = pvScore
         let snapshot = PracticeSnapshot(id: practice.id, name: practice.name, order: practice.order, scoringType: practice.scoringType, passMark: practice.passMark, esPassMark: practice.esPassMark, pvPassMark: practice.pvPassMark)
         firing.outcome = ScoringRule.outcome(for: snapshot, score: score, esScore: esScore, pvScore: pvScore)
-        try? context.save()
+        persist(session)
     }
 
     func toggleLane(_ number: Int) {
         guard let lane = session.lanes.first(where: { $0.number == number }) else { return }
         lane.active.toggle()
-        try? context.save()
+        persist(session)
     }
 
     func setOverride(cadetID: UUID, practiceID: UUID?) {
         guard let cadet = session.cadets.first(where: { $0.id == cadetID }) else { return }
         cadet.nextOverridePracticeID = practiceID
-        try? context.save()
+        persist(session)
     }
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `swift test --filter SessionStoreTests`
-Expected: PASS (5 tests)
+Expected: PASS (6 tests)
 
-- [ ] **Step 5: Run the full test suite**
+- [ ] **Step 6: Run the full test suite**
 
 Run: `swift test`
 Expected: PASS — all tests from Tasks 1–6.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add Sources/RangeDetailTracker/Store Tests/RangeDetailTrackerTests/SessionStoreTests.swift
-git commit -m "Add SessionStore bridging SwiftData and the domain layer"
+git commit -m "Add SessionStore bridging JSON persistence and the domain layer"
 ```
 
 ---
@@ -1115,8 +1262,8 @@ git commit -m "Add SessionStore bridging SwiftData and the domain layer"
 - Modify: `Sources/RangeDetailTracker/RangeDetailTrackerApp.swift`
 
 **Interfaces:**
-- Consumes: `Session`, `Practice`, `Lane`, `Cadet`, `ScoringType` (Task 1).
-- Produces: a working root screen that creates a `Session` (with its `Lane`s, `Practice`s, `Cadet`s) in the SwiftData context and hands off to `RangeView` (Task 8+, so for this task, hand off to a temporary placeholder `Text`).
+- Consumes: `Session`, `Practice`, `Lane`, `Cadet`, `ScoringType` (Task 1), `SessionPersistence.save`, `SessionStore.init(session:persist:)` (Task 6).
+- Produces: a working root screen that builds a `Session` (with its `Lane`s, `Practice`s, `Cadet`s) in memory, persists it, and hands off to `RangeView` (Task 8+, so for this task, hand off to a temporary placeholder `Text`).
 
 This task is UI: per the spec's testing approach, it is verified by running the app, not by automated tests.
 
@@ -1125,7 +1272,6 @@ This task is UI: per the spec's testing approach, it is verified by running the 
 `Sources/RangeDetailTracker/Views/SessionSetupView.swift`:
 ```swift
 import SwiftUI
-import SwiftData
 
 struct PracticeDraft: Identifiable {
     let id = UUID()
@@ -1137,7 +1283,6 @@ struct PracticeDraft: Identifiable {
 }
 
 struct SessionSetupView: View {
-    @Environment(\.modelContext) private var context
     @State private var laneCount: Int = 5
     @State private var practiceDrafts: [PracticeDraft] = [PracticeDraft()]
     @State private var cadetNamesText: String = ""
@@ -1145,7 +1290,7 @@ struct SessionSetupView: View {
 
     var body: some View {
         if let startedSession {
-            RangeView(store: SessionStore(context: context, session: startedSession))
+            RangeView(store: SessionStore(session: startedSession))
         } else {
             Form {
                 Section("Lanes") {
@@ -1224,8 +1369,7 @@ struct SessionSetupView: View {
         for name in cadetNames {
             session.cadets.append(Cadet(name: name))
         }
-        context.insert(session)
-        try? context.save()
+        SessionPersistence.save(session)
         return session
     }
 }
@@ -1236,7 +1380,6 @@ struct SessionSetupView: View {
 Modify `Sources/RangeDetailTracker/RangeDetailTrackerApp.swift`:
 ```swift
 import SwiftUI
-import SwiftData
 
 @main
 struct RangeDetailTrackerApp: App {
@@ -1244,9 +1387,6 @@ struct RangeDetailTrackerApp: App {
         WindowGroup {
             SessionSetupView()
         }
-        .modelContainer(for: [
-            Session.self, Practice.self, Lane.self, Cadet.self, Detail.self, Firing.self,
-        ])
     }
 }
 ```
@@ -1785,7 +1925,6 @@ struct ButtRegisterRow: Identifiable {
 `Tests/RangeDetailTrackerTests/ButtRegisterTests.swift`:
 ```swift
 import XCTest
-import SwiftData
 @testable import RangeDetailTracker
 
 final class ButtRegisterTests: XCTestCase {

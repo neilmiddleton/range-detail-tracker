@@ -72,6 +72,7 @@ struct SessionSetupView: View {
     private func practiceRow(_ draft: Binding<PracticeDraft>) -> some View {
         HStack {
             TextField("Name (e.g. GP1)", text: draft.name)
+                .frame(minWidth: 120, maxWidth: 260)
             Picker("Scoring", selection: draft.scoringType) {
                 Text("Standard").tag(ScoringType.standard)
                 Text("Zeroing").tag(ScoringType.zeroing)

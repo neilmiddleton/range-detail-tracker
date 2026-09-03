@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 struct ButtRegisterView: View {
     let store: SessionStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var exportError: String?
 
     private var rows: [ButtRegisterRow] {
         ButtRegisterBuilder.rows(for: store.session)
@@ -15,6 +17,7 @@ struct ButtRegisterView: View {
                 Text("Butt Register").font(.title2)
                 Spacer()
                 Button("Export CSV") { exportCSV() }
+                Button("Done") { dismiss() }
             }
             Table(rows) {
                 TableColumn("Detail") { Text("\($0.detailSequenceNumber)") }
@@ -29,6 +32,14 @@ struct ButtRegisterView: View {
         }
         .padding()
         .frame(minWidth: 700, minHeight: 400)
+        .alert("Export Failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        ), presenting: exportError) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
     }
 
     private func exportCSV() {
@@ -37,6 +48,10 @@ struct ButtRegisterView: View {
         panel.nameFieldStringValue = "butt-register.csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let csv = ButtRegisterCSVExporter.csv(for: rows)
-        try? csv.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try csv.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 }

@@ -3,16 +3,12 @@ import SwiftUI
 struct ResultsEntryView: View {
     @Bindable var store: SessionStore
 
-    private var pendingFirings: [Firing] {
-        guard let latest = store.session.details.max(by: { $0.sequenceNumber < $1.sequenceNumber }) else { return [] }
-        return latest.firings.filter { $0.outcome == nil }.sorted { $0.laneNumber < $1.laneNumber }
-    }
-
     var body: some View {
-        if !pendingFirings.isEmpty {
+        let firings = store.latestDetailFirings
+        if !firings.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Enter Results").font(.title2)
-                ForEach(pendingFirings) { firing in
+                ForEach(firings) { firing in
                     resultRow(firing)
                 }
             }
@@ -42,6 +38,10 @@ struct ResultsEntryView: View {
                     get: { firing.score ?? 0 },
                     set: { store.recordScore(firing: firing, score: $0, esScore: nil, pvScore: nil) }
                 ))
+            }
+            if let outcome = firing.outcome {
+                Text(outcome == .pass ? "✓ Pass" : "✗ Fail")
+                    .foregroundStyle(outcome == .pass ? .green : .red)
             }
         }
     }

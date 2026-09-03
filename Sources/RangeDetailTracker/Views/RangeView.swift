@@ -16,13 +16,14 @@ struct RangeView: View {
             }
             .frame(minWidth: 320)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    RosterPanelView(store: store)
+            VStack(alignment: .leading, spacing: 16) {
+                RosterPanelView(store: store)
+                ScrollView {
                     DetailHistoryView(store: store)
+                        .padding(.horizontal)
                 }
-                .padding()
             }
+            .padding()
             .frame(minWidth: 320)
         }
         .frame(minWidth: 800, minHeight: 500)

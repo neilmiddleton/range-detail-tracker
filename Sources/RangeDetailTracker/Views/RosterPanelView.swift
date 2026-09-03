@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RosterPanelView: View {
-    let store: SessionStore
+    @Bindable var store: SessionStore
 
     var body: some View {
         let practices = store.session.practices.sorted { $0.order < $1.order }
@@ -17,12 +17,34 @@ struct RosterPanelView: View {
                 )
                 Text(current?.name ?? "—")
             }
+            TableColumn("Next") { cadet in
+                Picker("Next", selection: Binding(
+                    get: { cadet.nextOverridePracticeID },
+                    set: { store.setOverride(cadetID: cadet.id, practiceID: $0) }
+                )) {
+                    Text("—").tag(UUID?.none)
+                    ForEach(practices) { practice in
+                        Text(practice.name).tag(Optional(practice.id))
+                    }
+                }
+                .labelsHidden()
+            }
             TableColumnForEach(practices) { practice in
                 TableColumn(practice.name) { cadet in
-                    let passed = ProgressionRule.hasPassed(practiceID: practice.id, cadetID: cadet.id, firings: firingRecords(for: cadet))
-                    Text(passed ? "✓" : "")
+                    Text(latestOutcomeSymbol(practiceID: practice.id, for: cadet))
                 }
             }
+        }
+    }
+
+    private func latestOutcomeSymbol(practiceID: UUID, for cadet: Cadet) -> String {
+        let records = firingRecords(for: cadet).filter { $0.practiceID == practiceID }
+        if records.contains(where: { $0.outcome == .pass }) {
+            return "✓"
+        } else if records.contains(where: { $0.outcome == .fail }) {
+            return "✗"
+        } else {
+            return ""
         }
     }
 

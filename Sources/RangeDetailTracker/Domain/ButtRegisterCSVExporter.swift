@@ -14,7 +14,7 @@ enum ButtRegisterCSVExporter {
             ]
             lines.append(fields.joined(separator: ","))
         }
-        return lines.joined(separator: "\n")
+        return lines.joined(separator: "\n") + "\n"
     }
 
     private static func csvField(_ value: String) -> String {

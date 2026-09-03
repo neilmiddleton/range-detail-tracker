@@ -85,6 +85,24 @@ final class SessionStore {
         persist(session)
     }
 
+    /// True if the most recently fired detail has any firing still awaiting a score.
+    var hasPendingResults: Bool {
+        guard let latest = session.details.max(by: { $0.sequenceNumber < $1.sequenceNumber }) else { return false }
+        return latest.firings.contains { $0.outcome == nil }
+    }
+
+    /// Firings on the most recent detail still awaiting a score, in lane order.
+    var pendingFirings: [Firing] {
+        guard let latest = session.details.max(by: { $0.sequenceNumber < $1.sequenceNumber }) else { return [] }
+        return latest.firings.filter { $0.outcome == nil }.sorted { $0.laneNumber < $1.laneNumber }
+    }
+
+    /// All firings on the most recent detail, in lane order (for reviewing/correcting scores).
+    var latestDetailFirings: [Firing] {
+        guard let latest = session.details.max(by: { $0.sequenceNumber < $1.sequenceNumber }) else { return [] }
+        return latest.firings.sorted { $0.laneNumber < $1.laneNumber }
+    }
+
     func setOverride(cadetID: UUID, practiceID: UUID?) {
         guard let cadet = session.cadets.first(where: { $0.id == cadetID }) else { return }
         cadet.nextOverridePracticeID = practiceID

@@ -10,7 +10,7 @@
 >
 > **Environment note (testing):** the same constraint rules out `swift test` entirely — both XCTest and the newer Swift Testing (`import Testing`) require the macOS SDK bundled inside Xcode.app; under Command Line Tools alone `swift test` fails with "no such module 'XCTest'"/"no such module 'Testing'" (also confirmed by spike). There is no `.testTarget` and no `Tests/` directory in this plan. Instead: a small hand-written `TestSupport.swift` (Task 1) provides `XCTestCase`, `XCTAssertEqual`, `XCTAssertNil`, `XCTAssertNotNil`, `XCTAssertTrue`, and `XCTUnwrap` — API-compatible with the real XCTest calls used throughout this plan — plus a `TestRunner` that tallies failures and exits non-zero on any. Test files live alongside production code at `Sources/RangeDetailTracker/Tests/*.swift` (same target — no `@testable import` needed) and each declares a `static let allTests` list of its test methods. `Sources/RangeDetailTracker/main.swift` checks `CommandLine.arguments` for a `--run-tests` flag (with an optional filter argument) and either runs `runAllTests(filter:)` or launches the SwiftUI app via `RangeDetailTrackerApp.main()`. Every task below that would otherwise say `swift test --filter X` instead says `swift run RangeDetailTracker --run-tests X`.
 
-**Tech Stack:** Swift 5.10+, SwiftUI, Observation, Foundation (JSON persistence and the hand-written test runner), macOS 14+ (`.v14` platform minimum, required for the Observation framework's `@Observable` macro).
+**Tech Stack:** Swift 5.10+, SwiftUI, Observation, Foundation (JSON persistence and the hand-written test runner), macOS 14.4+ (`"14.4"` platform minimum, required for the Observation framework's `@Observable` macro).
 
 **Spec:** `docs/superpowers/specs/2026-09-03-range-detail-tracker-design.md`
 
@@ -121,7 +121,7 @@ import PackageDescription
 
 let package = Package(
     name: "RangeDetailTracker",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS("14.4")],
     targets: [
         .executableTarget(
             name: "RangeDetailTracker",

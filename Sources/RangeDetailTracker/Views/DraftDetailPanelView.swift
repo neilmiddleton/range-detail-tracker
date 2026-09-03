@@ -47,7 +47,12 @@ struct DraftDetailPanelView: View {
             Button("Confirm Fired") {
                 store.confirmDraft()
             }
-            .disabled(store.displayedDraft.firings.allSatisfy { $0.cadetID == nil })
+            .disabled(store.displayedDraft.firings.allSatisfy { $0.cadetID == nil } || store.hasPendingResults)
+            if store.hasPendingResults {
+                Text("Score all firings from the previous detail before confirming a new one.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))

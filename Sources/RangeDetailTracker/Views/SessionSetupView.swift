@@ -13,11 +13,29 @@ struct SessionSetupView: View {
     @State private var laneCount: Int = 5
     @State private var practiceDrafts: [PracticeDraft] = [PracticeDraft()]
     @State private var cadetNamesText: String = ""
-    @State private var startedSession: Session?
+    @State private var store: SessionStore?
+    @State private var resumableSession: Session?
+    @State private var startingFresh = false
 
     var body: some View {
-        if let startedSession {
-            RangeView(store: SessionStore(session: startedSession))
+        if let store {
+            RangeView(store: store)
+        } else if let resumableSession, !startingFresh {
+            VStack(spacing: 16) {
+                Text("A previous session was found.").font(.title2)
+                Text("Resume it, or start a new session (the previous session's data stays saved on disk).")
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("Resume Previous Session") {
+                        store = SessionStore(session: resumableSession)
+                    }
+                    Button("Start New Session") {
+                        startingFresh = true
+                    }
+                }
+            }
+            .padding()
+            .frame(minWidth: 480, minHeight: 240)
         } else {
             Form {
                 Section("Lanes") {
@@ -36,12 +54,17 @@ struct SessionSetupView: View {
                         .frame(minHeight: 120)
                 }
                 Button("Start Session") {
-                    startedSession = makeSession()
+                    store = SessionStore(session: makeSession())
                 }
                 .disabled(!isValid)
             }
             .padding()
             .frame(minWidth: 480, minHeight: 480)
+            .onAppear {
+                if resumableSession == nil {
+                    resumableSession = SessionPersistence.load()
+                }
+            }
         }
     }
 

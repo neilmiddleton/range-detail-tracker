@@ -10,8 +10,12 @@ enum SessionPersistence {
     }
 
     static func save(_ session: Session) {
-        guard let data = try? JSONEncoder().encode(session) else { return }
-        try? data.write(to: fileURL(), options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(session)
+            try data.write(to: fileURL(), options: .atomic)
+        } catch {
+            print("Warning: failed to save session: \(error)")
+        }
     }
 
     static func load() -> Session? {

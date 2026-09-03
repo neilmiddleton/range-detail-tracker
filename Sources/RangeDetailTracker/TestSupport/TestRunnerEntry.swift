@@ -27,5 +27,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("DraftDetailGeneratorTests") {
+        for (name, method) in DraftDetailGeneratorTests.allTests {
+            TestRunner.shared.run(name) { try method(DraftDetailGeneratorTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

@@ -6,8 +6,11 @@ struct RangeView: View {
     var body: some View {
         HSplitView {
             ScrollView {
-                LaneGridView(store: store)
-                    .padding()
+                VStack(alignment: .leading, spacing: 16) {
+                    DraftDetailPanelView(store: store)
+                    LaneGridView(store: store)
+                }
+                .padding()
             }
             .frame(minWidth: 320)
 

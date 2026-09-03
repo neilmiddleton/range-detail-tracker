@@ -7,6 +7,7 @@ struct RangeView: View {
         HSplitView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    ResultsEntryView(store: store)
                     DraftDetailPanelView(store: store)
                     LaneGridView(store: store)
                 }

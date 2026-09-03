@@ -23,19 +23,37 @@ assignment during a live range session.
   a session and back into commission later.
 - **Detail** — one firing round: an assignment of cadets to active
   lanes, each paired with the practice they are firing. Once a detail
-  is confirmed as fired, it is an immutable historical record; pass/
-  fail results are recorded against it.
-- **Cadet** — a roster member with a pass/fail/not-attempted result
-  per practice for the session, used to compute their current
-  progression.
+  is confirmed as fired, it is an immutable historical record; a
+  score (and derived pass/fail) is recorded against each lane.
+- **Cadet** — a roster member whose pass/fail per practice, and
+  current progression, is derived from their recorded firing scores
+  for the session.
+- **Butt register** — the end-of-session output: every cadet, every
+  shoot they fired, and the score they got, organised by detail.
+
+## Scoring and pass/fail
+
+Each practice is configured with a **scoring type**, set during
+Session Setup:
+
+- **Standard** — one score per firing, with a configured pass mark.
+  Passed if `score >= passMark`.
+- **Zeroing** — two scores per firing, ES and PV, each with its own
+  configured pass mark. Passed only if **both** individually meet
+  their pass mark (`esScore >= esPassMark AND pvScore >= pvPassMark`).
+
+Pass/fail is always derived from the recorded score(s) against the
+practice's configured pass mark(s) — the RCO enters scores, never a
+pass/fail judgement directly.
 
 ## Progression rule
 
 A cadet's **current practice** is the first practice (in configured
-order) they have not yet passed. A fail leaves this unchanged — they
-are due to repeat the same practice next time they're placed in a
-detail. There is no automatic retry limit; a human always decides
-when to move a struggling cadet on (see manual override below).
+order) they have not yet passed (per the scoring rule above). A fail
+leaves this unchanged — they are due to repeat the same practice next
+time they're placed in a detail. There is no automatic retry limit; a
+human always decides when to move a struggling cadet on (see manual
+override below).
 
 A cadet who has passed every configured practice does not stop being
 scheduled: their current practice resolves to the **final** practice
@@ -61,6 +79,10 @@ Practice
   id: UUID
   name: String              // e.g. "GP1"
   order: Int                // progression sequence, 0-based
+  scoringType: ScoringType  // .standard | .zeroing
+  passMark: Int?            // standard: minimum score to pass
+  esPassMark: Int?          // zeroing: minimum ES score to pass
+  pvPassMark: Int?          // zeroing: minimum PV score to pass
 
 Lane
   number: Int                // 1...10
@@ -69,26 +91,24 @@ Lane
 Cadet
   id: UUID
   name: String
-  attempts: [PracticeAttempt]      // full attempt history, one row per firing
   nextOverridePracticeID: UUID?    // one-shot manual override, cleared after use
-
-PracticeAttempt
-  practiceID: UUID
-  detailID: UUID              // which detail this attempt was fired in
-  outcome: Outcome            // .pass | .fail
-  firedAt: Date
+  // Firing history is not duplicated on the cadet — it's derived by
+  // querying Firing rows across all details where cadetID == self.id.
 
 Detail
   id: UUID
   sequenceNumber: Int
   firedAt: Date
-  assignments: [LaneAssignment]   // immutable once the detail is confirmed fired
+  firings: [Firing]          // one per lane in this detail; immutable once confirmed fired
 
-LaneAssignment
+Firing
   laneNumber: Int
   cadetID: UUID
   practiceID: UUID
-  outcome: Outcome?          // nil until result entered; then .pass | .fail
+  score: Int?                // standard practices; nil until entered
+  esScore: Int?              // zeroing practices; nil until entered
+  pvScore: Int?              // zeroing practices; nil until entered
+  outcome: Outcome?          // nil until score(s) entered, then derived .pass | .fail
 ```
 
 ## Detail generation algorithm
@@ -139,18 +159,23 @@ editable before it is fired:
   a fail), they set that cadet's one-shot override, which is
   consumed the next time that cadet is scheduled.
 - Confirming a draft turns it into a `Detail` record (immutable
-  history) with `outcome == nil` per lane, ready for results entry.
+  history) with one `Firing` per lane, scores unset, ready for
+  results entry.
 
 ## Results entry
 
-After a detail is confirmed as fired, the RCO records pass/fail per
-lane. Entering a result:
-- Sets the `outcome` on that `LaneAssignment`.
-- Appends a new `PracticeAttempt` to the cadet's history for that
-  practice (so repeat firings — including repeats of an
-  already-passed final practice — are all individually recorded).
+After a detail is confirmed as fired, the RCO records a score for
+each lane — a single score for a standard practice, or ES and PV
+scores for a zeroing practice (matching that lane's `Firing.practice`
+scoring type). Entering score(s):
+- Sets the score field(s) on that lane's `Firing`.
+- Derives and sets `Firing.outcome` by comparing the score(s) to the
+  practice's configured pass mark(s).
 - Immediately triggers recomputation of the live draft "up next"
   detail (fairness/progression state has changed).
+
+Every firing is kept — including repeats of an already-passed final
+practice — so the full history feeds the butt register.
 
 ## Screens
 
@@ -158,7 +183,8 @@ lane. Entering a result:
    - Set lane count (1–10).
    - Define the ordered list of practices for this session (name +
      order), free-form so any naming scheme (`AR1..AR5`, `GP1,GP3,
-     GP5`, etc.) works.
+     GP5`, etc.) works. For each practice, set its scoring type
+     (standard or zeroing) and pass mark(s).
    - Add the cadet roster (names).
    - Starting the session creates the `Session`, `Lane` rows, and
      `Cadet` rows and moves to Range View.
@@ -180,6 +206,16 @@ lane. Entering a result:
      override.
    - **History**: a scrollable log of past fired details below/behind
      the main panel, for reference.
+
+3. **Butt Register** (accessible from Range View, e.g. a toolbar
+   button — typically reviewed at end of session but available any
+   time)
+   - A table, one row per firing, columns: detail number, lane, cadet,
+     practice, score (or ES/PV scores for zeroing practices), outcome.
+   - Ordered by detail, then lane, matching how firing actually
+     happened.
+   - "Export CSV" writes the same rows to a `.csv` file via a save
+     panel.
 
 ## Persistence
 
@@ -213,6 +249,13 @@ thorough red-green unit tests first, covering:
   practice and keep being scheduled, competing fairly with
   still-progressing cadets, with each firing recorded as a separate
   attempt.
+
+Pass/fail derivation is also a pure function and gets its own unit
+tests, covering:
+- Standard scoring: pass exactly at the pass mark, fail one below.
+- Zeroing scoring: fails if either ES or PV is below its pass mark
+  even when the other is well above; passes only when both meet
+  their marks.
 
 UI is smoke-tested manually in the running app (SwiftUI previews +
 manual exercise of Session Setup → Range View → confirm/results

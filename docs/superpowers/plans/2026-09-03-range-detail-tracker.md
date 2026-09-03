@@ -6,9 +6,11 @@
 
 **Architecture:** SwiftUI, built as a Swift Package Manager executable app (no `.xcodeproj`, no external dependencies). A pure, dependency-free domain layer (`Domain/`) implements progression, scoring, fairness, and detail-generation as plain functions over value types — this is what gets thorough unit tests. Plain `@Observable` model classes (`Models/`), each conforming to `Codable` by hand, hold the session's state in memory and serialize to a single JSON file on disk. A `SessionStore` bridges the two: it reads the in-memory models into domain snapshots, calls the pure functions, mutates the models, and persists the whole session to disk after every change. SwiftUI views are thin and manually smoke-tested, per the spec's testing approach.
 
-> **Environment note:** the original design used SwiftData (`@Model`). That macro's implementation ships only inside Xcode.app, not with Xcode Command Line Tools, and this machine has no Xcode installed and cannot install it — `swift build`/`swift test` fail with "external macro implementation type ... could not be found" under Command Line Tools alone (confirmed by spiking `@Observable`, which is a different, open-source Swift macro and builds fine standalone, isolating the failure to SwiftData specifically). Persistence was therefore redesigned around hand-written `Codable` conformance and `@Observable` for UI reactivity — both work under Command Line Tools alone — with a single JSON file on disk standing in for SwiftData's store. Nothing else in the spec (progression, scoring, fairness, detail generation, screens) changes.
+> **Environment note (persistence):** the original design used SwiftData (`@Model`). That macro's implementation ships only inside Xcode.app, not with Xcode Command Line Tools, and this machine has no Xcode installed and cannot install it — `swift build`/`swift test` fail with "external macro implementation type ... could not be found" under Command Line Tools alone (confirmed by spiking `@Observable`, which is a different, open-source Swift macro and builds fine standalone, isolating the failure to SwiftData specifically). Persistence was therefore redesigned around hand-written `Codable` conformance and `@Observable` for UI reactivity — both work under Command Line Tools alone — with a single JSON file on disk standing in for SwiftData's store. Nothing else in the spec (progression, scoring, fairness, detail generation, screens) changes.
+>
+> **Environment note (testing):** the same constraint rules out `swift test` entirely — both XCTest and the newer Swift Testing (`import Testing`) require the macOS SDK bundled inside Xcode.app; under Command Line Tools alone `swift test` fails with "no such module 'XCTest'"/"no such module 'Testing'" (also confirmed by spike). There is no `.testTarget` and no `Tests/` directory in this plan. Instead: a small hand-written `TestSupport.swift` (Task 1) provides `XCTestCase`, `XCTAssertEqual`, `XCTAssertNil`, `XCTAssertNotNil`, `XCTAssertTrue`, and `XCTUnwrap` — API-compatible with the real XCTest calls used throughout this plan — plus a `TestRunner` that tallies failures and exits non-zero on any. Test files live alongside production code at `Sources/RangeDetailTracker/Tests/*.swift` (same target — no `@testable import` needed) and each declares a `static let allTests` list of its test methods. `Sources/RangeDetailTracker/main.swift` checks `CommandLine.arguments` for a `--run-tests` flag (with an optional filter argument) and either runs `runAllTests(filter:)` or launches the SwiftUI app via `RangeDetailTrackerApp.main()`. Every task below that would otherwise say `swift test --filter X` instead says `swift run RangeDetailTracker --run-tests X`.
 
-**Tech Stack:** Swift 5.10+, SwiftUI, Observation, Foundation (JSON persistence), XCTest, macOS 14+ (`.v14` platform minimum, required for the Observation framework's `@Observable` macro).
+**Tech Stack:** Swift 5.10+, SwiftUI, Observation, Foundation (JSON persistence and the hand-written test runner), macOS 14+ (`.v14` platform minimum, required for the Observation framework's `@Observable` macro).
 
 **Spec:** `docs/superpowers/specs/2026-09-03-range-detail-tracker-design.md`
 
@@ -36,7 +38,11 @@
 ```
 Package.swift
 Sources/RangeDetailTracker/
-  RangeDetailTrackerApp.swift          // @main, root view
+  main.swift                           // entry point: --run-tests dispatch or launch the app
+  RangeDetailTrackerApp.swift          // App conformance (no @main — main.swift calls .main())
+  TestSupport/
+    TestSupport.swift                  // XCTestCase/XCTAssert*/XCTUnwrap shim, TestRunner
+    TestRunnerEntry.swift              // runAllTests(filter:) — aggregates every *Tests.allTests
   Models/
     ScoringType.swift                  // enum, shared by Models and Domain
     Outcome.swift                      // enum, shared by Models and Domain
@@ -71,14 +77,14 @@ Sources/RangeDetailTracker/
     ResultsEntryView.swift
     DetailHistoryView.swift
     ButtRegisterView.swift
-Tests/RangeDetailTrackerTests/
-  ModelPersistenceTests.swift
-  ScoringRuleTests.swift
-  ProgressionRuleTests.swift
-  FairnessRankingTests.swift
-  DraftDetailGeneratorTests.swift
-  SessionStoreTests.swift
-  ButtRegisterTests.swift
+  Tests/
+    ModelPersistenceTests.swift
+    ScoringRuleTests.swift
+    ProgressionRuleTests.swift
+    FairnessRankingTests.swift
+    DraftDetailGeneratorTests.swift
+    SessionStoreTests.swift
+    ButtRegisterTests.swift
 ```
 
 ---
@@ -87,7 +93,10 @@ Tests/RangeDetailTrackerTests/
 
 **Files:**
 - Create: `Package.swift`
+- Create: `Sources/RangeDetailTracker/main.swift`
 - Create: `Sources/RangeDetailTracker/RangeDetailTrackerApp.swift`
+- Create: `Sources/RangeDetailTracker/TestSupport/TestSupport.swift`
+- Create: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 - Create: `Sources/RangeDetailTracker/Models/ScoringType.swift`
 - Create: `Sources/RangeDetailTracker/Models/Outcome.swift`
 - Create: `Sources/RangeDetailTracker/Models/Session.swift`
@@ -96,11 +105,12 @@ Tests/RangeDetailTrackerTests/
 - Create: `Sources/RangeDetailTracker/Models/Cadet.swift`
 - Create: `Sources/RangeDetailTracker/Models/Detail.swift`
 - Create: `Sources/RangeDetailTracker/Models/Firing.swift`
-- Test: `Tests/RangeDetailTrackerTests/ModelPersistenceTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/ModelPersistenceTests.swift`
 
 **Interfaces:**
 - Produces: `ScoringType` (`.standard`, `.zeroing`), `Outcome` (`.pass`, `.fail`) — used by every later task.
 - Produces: `Session`, `Practice`, `Lane`, `Cadet`, `Detail`, `Firing` — plain `@Observable` reference types, each conforming to `Codable` by hand (an explicit `init(from:)`/`encode(to:)`, NOT relying on synthesis — `@Observable` rewrites stored properties, which breaks compiler-synthesized `Codable` and produces a "does not conform to Decodable" error; write the coding methods exactly as shown below). Each has `id: UUID` (except `Lane`, whose `id` is a computed `Int` equal to `number`), used by `SessionStore` (Task 6) and all views. These are a plain owned tree (`Session` holds arrays of the rest) — no back-pointers, no relationship framework.
+- Produces: `XCTestCase`, `XCTAssertEqual`, `XCTAssertNil`, `XCTAssertNotNil`, `XCTAssertTrue`, `XCTUnwrap`, `TestRunner.shared` (from `TestSupport.swift`), and `runAllTests(filter:)` (from `TestRunnerEntry.swift`) — used by every task with tests (2, 3, 4, 5, 6, 13). No `.testTarget`, no `Tests/` top-level directory, and no `import XCTest`/`import Testing` anywhere in this project — see the Environment note (testing) above for why.
 
 - [ ] **Step 1: Create the package manifest**
 
@@ -116,11 +126,6 @@ let package = Package(
         .executableTarget(
             name: "RangeDetailTracker",
             path: "Sources/RangeDetailTracker"
-        ),
-        .testTarget(
-            name: "RangeDetailTrackerTests",
-            dependencies: ["RangeDetailTracker"],
-            path: "Tests/RangeDetailTrackerTests"
         ),
     ]
 )
@@ -423,13 +428,112 @@ final class Session: Codable, Identifiable {
 }
 ```
 
-- [ ] **Step 4: Write a placeholder app entry point**
+- [ ] **Step 4: Write the hand-rolled test support shim**
+
+No test framework is available in this environment (see the Environment
+note (testing) above) — this shim replaces XCTest with API-compatible
+functions and a runner, entirely in plain Swift/Foundation.
+
+`Sources/RangeDetailTracker/TestSupport/TestSupport.swift`:
+```swift
+import Foundation
+
+open class XCTestCase {
+    public required init() {}
+}
+
+public struct TestFailure: Error, CustomStringConvertible {
+    public let message: String
+    public var description: String { message }
+}
+
+func XCTAssertEqual<T: Equatable>(_ a: @autoclosure () -> T, _ b: @autoclosure () -> T, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    let (av, bv) = (a(), b())
+    if av != bv {
+        TestRunner.shared.recordFailure("XCTAssertEqual failed: \(av) != \(bv). \(message)", file: file, line: line)
+    }
+}
+
+func XCTAssertNil(_ a: @autoclosure () -> Any?, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    if a() != nil {
+        TestRunner.shared.recordFailure("XCTAssertNil failed. \(message)", file: file, line: line)
+    }
+}
+
+func XCTAssertNotNil(_ a: @autoclosure () -> Any?, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    if a() == nil {
+        TestRunner.shared.recordFailure("XCTAssertNotNil failed. \(message)", file: file, line: line)
+    }
+}
+
+func XCTAssertTrue(_ a: @autoclosure () -> Bool, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    if !a() {
+        TestRunner.shared.recordFailure("XCTAssertTrue failed. \(message)", file: file, line: line)
+    }
+}
+
+func XCTUnwrap<T>(_ a: T?, _ message: String = "", file: StaticString = #file, line: UInt = #line) throws -> T {
+    guard let a else {
+        TestRunner.shared.recordFailure("XCTUnwrap failed. \(message)", file: file, line: line)
+        throw TestFailure(message: "XCTUnwrap failed")
+    }
+    return a
+}
+
+final class TestRunner {
+    static let shared = TestRunner()
+    private var failureCount = 0
+    private var testCount = 0
+
+    func recordFailure(_ message: String, file: StaticString, line: UInt) {
+        failureCount += 1
+        print("FAIL: \(message) (\(file):\(line))")
+    }
+
+    func run(_ name: String, _ body: () throws -> Void) {
+        testCount += 1
+        do {
+            try body()
+        } catch {
+            failureCount += 1
+            print("FAIL: \(name) threw: \(error)")
+        }
+    }
+
+    func finish() -> Never {
+        print("\n\(testCount) tests run, \(failureCount) assertion failures")
+        exit(failureCount == 0 ? 0 : 1)
+    }
+}
+```
+
+`Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`:
+```swift
+func runAllTests(filter: String?) -> Never {
+    func matches(_ name: String) -> Bool {
+        filter == nil || name.contains(filter!)
+    }
+
+    if matches("ModelPersistenceTests") {
+        for (name, method) in ModelPersistenceTests.allTests {
+            TestRunner.shared.run(name) { try method(ModelPersistenceTests())() }
+        }
+    }
+
+    TestRunner.shared.finish()
+}
+```
+
+- [ ] **Step 5: Write the app entry point**
+
+Split in two: `RangeDetailTrackerApp` no longer carries `@main` directly
+— `main.swift` decides at startup whether to run tests or launch the
+SwiftUI app, so `App.main()` is called explicitly instead.
 
 `Sources/RangeDetailTracker/RangeDetailTrackerApp.swift`:
 ```swift
 import SwiftUI
 
-@main
 struct RangeDetailTrackerApp: App {
     var body: some Scene {
         WindowGroup {
@@ -440,13 +544,22 @@ struct RangeDetailTrackerApp: App {
 }
 ```
 
-- [ ] **Step 5: Write the failing smoke test**
-
-`Tests/RangeDetailTrackerTests/ModelPersistenceTests.swift`:
+`Sources/RangeDetailTracker/main.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
+import Foundation
 
+if let flagIndex = CommandLine.arguments.firstIndex(of: "--run-tests") {
+    let filter = CommandLine.arguments.count > flagIndex + 1 ? CommandLine.arguments[flagIndex + 1] : nil
+    runAllTests(filter: filter)
+} else {
+    RangeDetailTrackerApp.main()
+}
+```
+
+- [ ] **Step 6: Write the failing smoke test**
+
+`Sources/RangeDetailTracker/Tests/ModelPersistenceTests.swift`:
+```swift
 final class ModelPersistenceTests: XCTestCase {
     func testSessionRoundTripsThroughJSON() throws {
         let session = Session(laneCount: 5)
@@ -466,19 +579,28 @@ final class ModelPersistenceTests: XCTestCase {
         XCTAssertEqual(decoded.lanes.first?.number, 1)
         XCTAssertEqual(decoded.cadets.first?.name, "Test Cadet")
     }
+
+    static let allTests: [(String, (ModelPersistenceTests) -> () throws -> Void)] = [
+        ("testSessionRoundTripsThroughJSON", testSessionRoundTripsThroughJSON),
+    ]
 }
 ```
 
-- [ ] **Step 6: Run the test to verify the project builds and the test passes**
+Note: no `import XCTest` and no `@testable import RangeDetailTracker` —
+this file is compiled into the same target as production code, and
+`XCTestCase`/`XCTAssertEqual`/etc. come from `TestSupport.swift` in the
+same module.
 
-Run: `swift test --filter ModelPersistenceTests`
-Expected: PASS (this is scaffolding, not red/green — first run should already pass since the models are written; the point of running it is confirming the package builds and every model round-trips through `JSONEncoder`/`JSONDecoder` correctly, including the `@Observable` + hand-written `Codable` combination).
+- [ ] **Step 7: Run the test to verify the project builds and the test passes**
 
-- [ ] **Step 7: Commit**
+Run: `swift run RangeDetailTracker --run-tests ModelPersistenceTests`
+Expected: PASS (this is scaffolding, not red/green — first run should already pass since the models are written; the point of running it is confirming the package builds and every model round-trips through `JSONEncoder`/`JSONDecoder` correctly, including the `@Observable` + hand-written `Codable` combination). Output ends `1 tests run, 0 assertion failures`, exit code 0.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add Package.swift Sources Tests
-git commit -m "Scaffold SPM app and Codable/Observable model classes"
+git add Package.swift Sources
+git commit -m "Scaffold SPM app, Codable/Observable model classes, and hand-rolled test runner"
 ```
 
 ---
@@ -491,7 +613,8 @@ git commit -m "Scaffold SPM app and Codable/Observable model classes"
 - Create: `Sources/RangeDetailTracker/Domain/LaneSnapshot.swift`
 - Create: `Sources/RangeDetailTracker/Domain/FiringRecord.swift`
 - Create: `Sources/RangeDetailTracker/Domain/ScoringRule.swift`
-- Test: `Tests/RangeDetailTrackerTests/ScoringRuleTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/ScoringRuleTests.swift`
+- Modify: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 
 **Interfaces:**
 - Consumes: `ScoringType`, `Outcome` (Task 1).
@@ -555,11 +678,8 @@ struct FiringRecord: Identifiable, Equatable {
 
 - [ ] **Step 2: Write the failing test**
 
-`Tests/RangeDetailTrackerTests/ScoringRuleTests.swift`:
+`Sources/RangeDetailTracker/Tests/ScoringRuleTests.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
-
 final class ScoringRuleTests: XCTestCase {
     func standardPractice(passMark: Int) -> PracticeSnapshot {
         PracticeSnapshot(id: UUID(), name: "AR1", order: 0, scoringType: .standard, passMark: passMark, esPassMark: nil, pvPassMark: nil)
@@ -594,12 +714,29 @@ final class ScoringRuleTests: XCTestCase {
         let practice = standardPractice(passMark: 20)
         XCTAssertNil(ScoringRule.outcome(for: practice, score: nil, esScore: nil, pvScore: nil))
     }
+
+    static let allTests: [(String, (ScoringRuleTests) -> () throws -> Void)] = [
+        ("testStandardPassesAtExactPassMark", testStandardPassesAtExactPassMark),
+        ("testStandardFailsOneBelowPassMark", testStandardFailsOneBelowPassMark),
+        ("testZeroingFailsIfEitherScoreBelowMark", testZeroingFailsIfEitherScoreBelowMark),
+        ("testZeroingPassesOnlyWhenBothMeetMarks", testZeroingPassesOnlyWhenBothMeetMarks),
+        ("testReturnsNilWhenScoresNotYetEntered", testReturnsNilWhenScoresNotYetEntered),
+    ]
 }
+```
+
+Modify `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift` — add before `TestRunner.shared.finish()`:
+```swift
+    if matches("ScoringRuleTests") {
+        for (name, method) in ScoringRuleTests.allTests {
+            TestRunner.shared.run(name) { try method(ScoringRuleTests())() }
+        }
+    }
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `swift test --filter ScoringRuleTests`
+Run: `swift run RangeDetailTracker --run-tests ScoringRuleTests`
 Expected: FAIL to compile — `ScoringRule` not defined.
 
 - [ ] **Step 4: Write the minimal implementation**
@@ -625,13 +762,13 @@ enum ScoringRule {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter ScoringRuleTests`
-Expected: PASS (5 tests)
+Run: `swift run RangeDetailTracker --run-tests ScoringRuleTests`
+Expected: PASS — output ends `5 tests run, 0 assertion failures`, exit code 0.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/RangeDetailTracker/Domain Tests/RangeDetailTrackerTests/ScoringRuleTests.swift
+git add Sources/RangeDetailTracker/Domain Sources/RangeDetailTracker/Tests/ScoringRuleTests.swift Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift
 git commit -m "Add domain snapshots and score-based pass/fail derivation"
 ```
 
@@ -641,7 +778,8 @@ git commit -m "Add domain snapshots and score-based pass/fail derivation"
 
 **Files:**
 - Create: `Sources/RangeDetailTracker/Domain/ProgressionRule.swift`
-- Test: `Tests/RangeDetailTrackerTests/ProgressionRuleTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/ProgressionRuleTests.swift`
+- Modify: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 
 **Interfaces:**
 - Consumes: `PracticeSnapshot`, `FiringRecord`, `Outcome` (Task 2).
@@ -649,11 +787,8 @@ git commit -m "Add domain snapshots and score-based pass/fail derivation"
 
 - [ ] **Step 1: Write the failing test**
 
-`Tests/RangeDetailTrackerTests/ProgressionRuleTests.swift`:
+`Sources/RangeDetailTracker/Tests/ProgressionRuleTests.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
-
 final class ProgressionRuleTests: XCTestCase {
     let ar1 = PracticeSnapshot(id: UUID(), name: "AR1", order: 0, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
     let ar2 = PracticeSnapshot(id: UUID(), name: "AR2", order: 1, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
@@ -698,12 +833,29 @@ final class ProgressionRuleTests: XCTestCase {
     func testNoPracticesReturnsNil() {
         XCTAssertNil(ProgressionRule.currentPractice(for: UUID(), practices: [], firings: []))
     }
+
+    static let allTests: [(String, (ProgressionRuleTests) -> () throws -> Void)] = [
+        ("testCurrentPracticeIsFirstUnpassedPractice", testCurrentPracticeIsFirstUnpassedPractice),
+        ("testCurrentPracticeStaysSameAfterFail", testCurrentPracticeStaysSameAfterFail),
+        ("testCannotSkipAheadEvenIfLaterPracticeSomehowPassed", testCannotSkipAheadEvenIfLaterPracticeSomehowPassed),
+        ("testCompletedCadetResolvesToFinalPractice", testCompletedCadetResolvesToFinalPractice),
+        ("testNoPracticesReturnsNil", testNoPracticesReturnsNil),
+    ]
 }
+```
+
+Modify `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift` — add before `TestRunner.shared.finish()`:
+```swift
+    if matches("ProgressionRuleTests") {
+        for (name, method) in ProgressionRuleTests.allTests {
+            TestRunner.shared.run(name) { try method(ProgressionRuleTests())() }
+        }
+    }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter ProgressionRuleTests`
+Run: `swift run RangeDetailTracker --run-tests ProgressionRuleTests`
 Expected: FAIL to compile — `ProgressionRule` not defined.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -730,13 +882,13 @@ enum ProgressionRule {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `swift test --filter ProgressionRuleTests`
-Expected: PASS (5 tests)
+Run: `swift run RangeDetailTracker --run-tests ProgressionRuleTests`
+Expected: PASS — output ends `5 tests run, 0 assertion failures`, exit code 0.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/RangeDetailTracker/Domain/ProgressionRule.swift Tests/RangeDetailTrackerTests/ProgressionRuleTests.swift
+git add Sources/RangeDetailTracker/Domain/ProgressionRule.swift Sources/RangeDetailTracker/Tests/ProgressionRuleTests.swift Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift
 git commit -m "Add progression rule: block skip-ahead, resolve completed cadets to final practice"
 ```
 
@@ -746,7 +898,8 @@ git commit -m "Add progression rule: block skip-ahead, resolve completed cadets 
 
 **Files:**
 - Create: `Sources/RangeDetailTracker/Domain/FairnessRanking.swift`
-- Test: `Tests/RangeDetailTrackerTests/FairnessRankingTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/FairnessRankingTests.swift`
+- Modify: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 
 **Interfaces:**
 - Consumes: `FiringRecord` (Task 2).
@@ -754,11 +907,8 @@ git commit -m "Add progression rule: block skip-ahead, resolve completed cadets 
 
 - [ ] **Step 1: Write the failing test**
 
-`Tests/RangeDetailTrackerTests/FairnessRankingTests.swift`:
+`Sources/RangeDetailTracker/Tests/FairnessRankingTests.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
-
 final class FairnessRankingTests: XCTestCase {
     func firing(cadetID: UUID, sequenceNumber: Int) -> FiringRecord {
         FiringRecord(id: UUID(), detailID: UUID(), sequenceNumber: sequenceNumber, firedAt: .now, laneNumber: 1, cadetID: cadetID, practiceID: UUID(), score: 20, esScore: nil, pvScore: nil, outcome: .pass)
@@ -796,12 +946,27 @@ final class FairnessRankingTests: XCTestCase {
         let ranked = FairnessRanking.rank(cadetIDs: [firedTwice, firedOnce], firings: firings)
         XCTAssertEqual(ranked, [firedOnce, firedTwice])
     }
+
+    static let allTests: [(String, (FairnessRankingTests) -> () throws -> Void)] = [
+        ("testNeverFiredCadetRanksBeforeFiredCadet", testNeverFiredCadetRanksBeforeFiredCadet),
+        ("testLeastRecentlyFiredRanksFirst", testLeastRecentlyFiredRanksFirst),
+        ("testFewestFiredCountBreaksRecencyTie", testFewestFiredCountBreaksRecencyTie),
+    ]
 }
+```
+
+Modify `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift` — add before `TestRunner.shared.finish()`:
+```swift
+    if matches("FairnessRankingTests") {
+        for (name, method) in FairnessRankingTests.allTests {
+            TestRunner.shared.run(name) { try method(FairnessRankingTests())() }
+        }
+    }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter FairnessRankingTests`
+Run: `swift run RangeDetailTracker --run-tests FairnessRankingTests`
 Expected: FAIL to compile — `FairnessRanking` not defined.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -836,13 +1001,13 @@ enum FairnessRanking {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `swift test --filter FairnessRankingTests`
-Expected: PASS (3 tests)
+Run: `swift run RangeDetailTracker --run-tests FairnessRankingTests`
+Expected: PASS — output ends `3 tests run, 0 assertion failures`, exit code 0.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/RangeDetailTracker/Domain/FairnessRanking.swift Tests/RangeDetailTrackerTests/FairnessRankingTests.swift
+git add Sources/RangeDetailTracker/Domain/FairnessRanking.swift Sources/RangeDetailTracker/Tests/FairnessRankingTests.swift Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift
 git commit -m "Add fairness ranking: least-recent then fewest-fired"
 ```
 
@@ -853,7 +1018,8 @@ git commit -m "Add fairness ranking: least-recent then fewest-fired"
 **Files:**
 - Create: `Sources/RangeDetailTracker/Domain/DraftDetail.swift`
 - Create: `Sources/RangeDetailTracker/Domain/DraftDetailGenerator.swift`
-- Test: `Tests/RangeDetailTrackerTests/DraftDetailGeneratorTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/DraftDetailGeneratorTests.swift`
+- Modify: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 
 **Interfaces:**
 - Consumes: `CadetSnapshot`, `PracticeSnapshot`, `LaneSnapshot`, `FiringRecord` (Task 2), `ProgressionRule.currentPractice` (Task 3), `FairnessRanking.rank` (Task 4).
@@ -879,11 +1045,8 @@ struct DraftDetail: Equatable {
 
 - [ ] **Step 2: Write the failing test**
 
-`Tests/RangeDetailTrackerTests/DraftDetailGeneratorTests.swift`:
+`Sources/RangeDetailTracker/Tests/DraftDetailGeneratorTests.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
-
 final class DraftDetailGeneratorTests: XCTestCase {
     let ar1 = PracticeSnapshot(id: UUID(), name: "AR1", order: 0, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
     let ar2 = PracticeSnapshot(id: UUID(), name: "AR2", order: 1, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
@@ -939,12 +1102,30 @@ final class DraftDetailGeneratorTests: XCTestCase {
         let draft = DraftDetailGenerator.nextDetail(cadets: [cadet], practices: [ar1, ar2], lanes: lanes([1]), firings: firings)
         XCTAssertEqual(draft.firings.first?.practiceID, ar2.id)
     }
+
+    static let allTests: [(String, (DraftDetailGeneratorTests) -> () throws -> Void)] = [
+        ("testFillsLanesFromSingleGroupUpToLaneCount", testFillsLanesFromSingleGroupUpToLaneCount),
+        ("testGroupsPracticesInContiguousBlocks", testGroupsPracticesInContiguousBlocks),
+        ("testExcludesOutOfCommissionLanes", testExcludesOutOfCommissionLanes),
+        ("testLeavesExcessLanesIdleWhenNotEnoughCadets", testLeavesExcessLanesIdleWhenNotEnoughCadets),
+        ("testManualOverrideIsUsedInsteadOfProgression", testManualOverrideIsUsedInsteadOfProgression),
+        ("testCompletedCadetPlacedOnFinalPractice", testCompletedCadetPlacedOnFinalPractice),
+    ]
 }
+```
+
+Modify `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift` — add before `TestRunner.shared.finish()`:
+```swift
+    if matches("DraftDetailGeneratorTests") {
+        for (name, method) in DraftDetailGeneratorTests.allTests {
+            TestRunner.shared.run(name) { try method(DraftDetailGeneratorTests())() }
+        }
+    }
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `swift test --filter DraftDetailGeneratorTests`
+Run: `swift run RangeDetailTracker --run-tests DraftDetailGeneratorTests`
 Expected: FAIL to compile — `DraftDetailGenerator` not defined.
 
 - [ ] **Step 4: Write the minimal implementation**
@@ -1011,13 +1192,13 @@ enum DraftDetailGenerator {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter DraftDetailGeneratorTests`
-Expected: PASS (6 tests)
+Run: `swift run RangeDetailTracker --run-tests DraftDetailGeneratorTests`
+Expected: PASS — output ends `6 tests run, 0 assertion failures`, exit code 0.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/RangeDetailTracker/Domain/DraftDetail.swift Sources/RangeDetailTracker/Domain/DraftDetailGenerator.swift Tests/RangeDetailTrackerTests/DraftDetailGeneratorTests.swift
+git add Sources/RangeDetailTracker/Domain/DraftDetail.swift Sources/RangeDetailTracker/Domain/DraftDetailGenerator.swift Sources/RangeDetailTracker/Tests/DraftDetailGeneratorTests.swift Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift
 git commit -m "Add draft detail generator: contiguous per-practice lane filling"
 ```
 
@@ -1028,7 +1209,8 @@ git commit -m "Add draft detail generator: contiguous per-practice lane filling"
 **Files:**
 - Create: `Sources/RangeDetailTracker/Store/SessionPersistence.swift`
 - Create: `Sources/RangeDetailTracker/Store/SessionStore.swift`
-- Test: `Tests/RangeDetailTrackerTests/SessionStoreTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/SessionStoreTests.swift`
+- Modify: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 
 **Interfaces:**
 - Consumes: `Session`, `Practice`, `Lane`, `Cadet`, `Detail`, `Firing` (Task 1), all `Domain` types and `DraftDetailGenerator.nextDetail`, `ScoringRule.outcome` (Tasks 2–5).
@@ -1063,11 +1245,8 @@ enum SessionPersistence {
 
 - [ ] **Step 2: Write the failing tests**
 
-`Tests/RangeDetailTrackerTests/SessionStoreTests.swift`:
+`Sources/RangeDetailTracker/Tests/SessionStoreTests.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
-
 final class SessionStoreTests: XCTestCase {
     func makeStore(laneCount: Int = 2) -> (store: SessionStore, practice: Practice) {
         let session = Session(laneCount: laneCount)
@@ -1129,12 +1308,30 @@ final class SessionStoreTests: XCTestCase {
         store.toggleLane(1)
         XCTAssertEqual(savedCount, 1)
     }
+
+    static let allTests: [(String, (SessionStoreTests) -> () throws -> Void)] = [
+        ("testConfirmDraftCreatesDetailWithFirings", testConfirmDraftCreatesDetailWithFirings),
+        ("testRecordScoreSetsDerivedOutcome", testRecordScoreSetsDerivedOutcome),
+        ("testToggleLaneRemovesLaneFromDraft", testToggleLaneRemovesLaneFromDraft),
+        ("testConfirmDraftClearsConsumedOverride", testConfirmDraftClearsConsumedOverride),
+        ("testEditDraftLaneOverridesForNextConfirmOnly", testEditDraftLaneOverridesForNextConfirmOnly),
+        ("testPersistIsCalledOnEveryMutation", testPersistIsCalledOnEveryMutation),
+    ]
 }
+```
+
+Modify `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift` — add before `TestRunner.shared.finish()`:
+```swift
+    if matches("SessionStoreTests") {
+        for (name, method) in SessionStoreTests.allTests {
+            TestRunner.shared.run(name) { try method(SessionStoreTests())() }
+        }
+    }
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `swift test --filter SessionStoreTests`
+Run: `swift run RangeDetailTracker --run-tests SessionStoreTests`
 Expected: FAIL to compile — `SessionStore` not defined.
 
 - [ ] **Step 4: Write the minimal implementation**
@@ -1238,18 +1435,18 @@ final class SessionStore {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter SessionStoreTests`
-Expected: PASS (6 tests)
+Run: `swift run RangeDetailTracker --run-tests SessionStoreTests`
+Expected: PASS — output ends `6 tests run, 0 assertion failures`, exit code 0.
 
 - [ ] **Step 6: Run the full test suite**
 
-Run: `swift test`
-Expected: PASS — all tests from Tasks 1–6.
+Run: `swift run RangeDetailTracker --run-tests`
+Expected: PASS — all tests from Tasks 1–6 (no filter argument runs everything), exit code 0.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Sources/RangeDetailTracker/Store Tests/RangeDetailTrackerTests/SessionStoreTests.swift
+git add Sources/RangeDetailTracker/Store Sources/RangeDetailTracker/Tests/SessionStoreTests.swift Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift
 git commit -m "Add SessionStore bridging JSON persistence and the domain layer"
 ```
 
@@ -1897,7 +2094,8 @@ git commit -m "Add detail history panel"
 - Create: `Sources/RangeDetailTracker/Domain/ButtRegisterCSVExporter.swift`
 - Create: `Sources/RangeDetailTracker/Views/ButtRegisterView.swift`
 - Modify: `Sources/RangeDetailTracker/Views/RangeView.swift`
-- Test: `Tests/RangeDetailTrackerTests/ButtRegisterTests.swift`
+- Test: `Sources/RangeDetailTracker/Tests/ButtRegisterTests.swift`
+- Modify: `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift`
 
 **Interfaces:**
 - Consumes: `Session`, `Detail`, `Firing`, `Cadet`, `Practice`, `Outcome` (Task 1).
@@ -1922,11 +2120,8 @@ struct ButtRegisterRow: Identifiable {
 
 - [ ] **Step 2: Write the failing test**
 
-`Tests/RangeDetailTrackerTests/ButtRegisterTests.swift`:
+`Sources/RangeDetailTracker/Tests/ButtRegisterTests.swift`:
 ```swift
-import XCTest
-@testable import RangeDetailTracker
-
 final class ButtRegisterTests: XCTestCase {
     func makeSessionWithOneFiring() throws -> Session {
         let session = Session(laneCount: 1)
@@ -1964,12 +2159,26 @@ final class ButtRegisterTests: XCTestCase {
         XCTAssertTrue(csv.contains("\"Smith, J\""))
         XCTAssertTrue(csv.hasPrefix("Detail,Lane,Cadet,Practice,Score,ES,PV,Outcome"))
     }
+
+    static let allTests: [(String, (ButtRegisterTests) -> () throws -> Void)] = [
+        ("testRowsAreOrderedByDetailThenLane", testRowsAreOrderedByDetailThenLane),
+        ("testCSVEscapesCadetNamesContainingCommas", testCSVEscapesCadetNamesContainingCommas),
+    ]
 }
+```
+
+Modify `Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift` — add before `TestRunner.shared.finish()`:
+```swift
+    if matches("ButtRegisterTests") {
+        for (name, method) in ButtRegisterTests.allTests {
+            TestRunner.shared.run(name) { try method(ButtRegisterTests())() }
+        }
+    }
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `swift test --filter ButtRegisterTests`
+Run: `swift run RangeDetailTracker --run-tests ButtRegisterTests`
 Expected: FAIL to compile — `ButtRegisterBuilder`/`ButtRegisterCSVExporter` not defined.
 
 - [ ] **Step 4: Write the minimal implementation**
@@ -2035,8 +2244,8 @@ enum ButtRegisterCSVExporter {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter ButtRegisterTests`
-Expected: PASS (2 tests)
+Run: `swift run RangeDetailTracker --run-tests ButtRegisterTests`
+Expected: PASS — output ends `2 tests run, 0 assertion failures`, exit code 0.
 
 - [ ] **Step 6: Write the Butt Register view with CSV export**
 
@@ -2135,12 +2344,12 @@ Expected: run a full session (start, confirm a couple of details, enter scores),
 
 - [ ] **Step 9: Run the full test suite one final time**
 
-Run: `swift test`
-Expected: PASS — all tests across every task.
+Run: `swift run RangeDetailTracker --run-tests`
+Expected: PASS — all tests across every task, exit code 0.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add Sources/RangeDetailTracker/Domain/ButtRegisterRow.swift Sources/RangeDetailTracker/Domain/ButtRegisterBuilder.swift Sources/RangeDetailTracker/Domain/ButtRegisterCSVExporter.swift Sources/RangeDetailTracker/Views/ButtRegisterView.swift Sources/RangeDetailTracker/Views/RangeView.swift Tests/RangeDetailTrackerTests/ButtRegisterTests.swift
+git add Sources/RangeDetailTracker/Domain/ButtRegisterRow.swift Sources/RangeDetailTracker/Domain/ButtRegisterBuilder.swift Sources/RangeDetailTracker/Domain/ButtRegisterCSVExporter.swift Sources/RangeDetailTracker/Views/ButtRegisterView.swift Sources/RangeDetailTracker/Views/RangeView.swift Sources/RangeDetailTracker/Tests/ButtRegisterTests.swift Sources/RangeDetailTracker/TestSupport/TestRunnerEntry.swift
 git commit -m "Add butt register view with CSV export"
 ```

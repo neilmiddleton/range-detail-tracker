@@ -15,5 +15,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("ProgressionRuleTests") {
+        for (name, method) in ProgressionRuleTests.allTests {
+            TestRunner.shared.run(name) { try method(ProgressionRuleTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

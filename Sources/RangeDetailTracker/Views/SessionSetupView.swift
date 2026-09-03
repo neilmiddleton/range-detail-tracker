@@ -9,6 +9,7 @@ struct PracticeDraft: Identifiable {
     var pvPassMark: Int = 0
 }
 
+@available(macOS 14.4, *)
 struct SessionSetupView: View {
     @State private var laneCount: Int = 5
     @State private var practiceDrafts: [PracticeDraft] = [PracticeDraft()]

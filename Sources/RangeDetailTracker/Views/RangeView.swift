@@ -1,10 +1,20 @@
 import SwiftUI
 
+@available(macOS 14.4, *)
 struct RangeView: View {
-    let store: SessionStore
+    @Bindable var store: SessionStore
 
     var body: some View {
-        Text("Session started with \(store.session.cadets.count) cadets")
-            .padding()
+        HSplitView {
+            ScrollView {
+                LaneGridView(store: store)
+                    .padding()
+            }
+            .frame(minWidth: 320)
+
+            RosterPanelView(store: store)
+                .frame(minWidth: 320)
+        }
+        .frame(minWidth: 800, minHeight: 500)
     }
 }

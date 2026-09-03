@@ -5,29 +5,34 @@ struct RangeView: View {
     @State private var showingButtRegister = false
 
     var body: some View {
-        HSplitView {
-            ScrollView {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        ResultsEntryView(store: store)
+                        DraftDetailPanelView(store: store)
+                        LaneGridView(store: store)
+                    }
+                    .padding()
+                }
+                .frame(width: geometry.size.width / 2)
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: 16) {
-                    ResultsEntryView(store: store)
-                    DraftDetailPanelView(store: store)
-                    LaneGridView(store: store)
+                    RosterPanelView(store: store)
+                    ScrollView {
+                        DetailHistoryView(store: store)
+                            .padding(.horizontal)
+                    }
                 }
                 .padding()
+                .frame(width: geometry.size.width / 2)
             }
-            .frame(minWidth: 320)
-
-            VStack(alignment: .leading, spacing: 16) {
-                RosterPanelView(store: store)
-                ScrollView {
-                    DetailHistoryView(store: store)
-                        .padding(.horizontal)
-                }
-            }
-            .padding()
-            .frame(minWidth: 320)
         }
         .frame(minWidth: 800, minHeight: 500)
         .tint(Theme.accentFill)
+        .dynamicTypeSize(.large)
         .toolbar {
             Button {
                 showingButtRegister = true

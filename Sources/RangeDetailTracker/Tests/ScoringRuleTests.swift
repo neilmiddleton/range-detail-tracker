@@ -14,15 +14,15 @@ final class ScoringRuleTests: XCTestCase {
         XCTAssertEqual(ScoringRule.outcome(for: practice, score: 20, esScore: nil, pvScore: nil), .pass)
     }
 
-    func testStandardFailsOneBelowPassMark() {
+    func testStandardFailsOneAbovePassMark() {
         let practice = standardPractice(passMark: 20)
-        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 19, esScore: nil, pvScore: nil), .fail)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 21, esScore: nil, pvScore: nil), .fail)
     }
 
-    func testZeroingFailsIfEitherScoreBelowMark() {
+    func testZeroingFailsIfEitherScoreAboveMark() {
         let practice = zeroingPractice(esPassMark: 10, pvPassMark: 10)
-        XCTAssertEqual(ScoringRule.outcome(for: practice, score: nil, esScore: 15, pvScore: 5), .fail)
         XCTAssertEqual(ScoringRule.outcome(for: practice, score: nil, esScore: 5, pvScore: 15), .fail)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: nil, esScore: 15, pvScore: 5), .fail)
     }
 
     func testZeroingPassesOnlyWhenBothMeetMarks() {
@@ -37,8 +37,8 @@ final class ScoringRuleTests: XCTestCase {
 
     static let allTests: [(String, (ScoringRuleTests) -> () throws -> Void)] = [
         ("testStandardPassesAtExactPassMark", testStandardPassesAtExactPassMark),
-        ("testStandardFailsOneBelowPassMark", testStandardFailsOneBelowPassMark),
-        ("testZeroingFailsIfEitherScoreBelowMark", testZeroingFailsIfEitherScoreBelowMark),
+        ("testStandardFailsOneAbovePassMark", testStandardFailsOneAbovePassMark),
+        ("testZeroingFailsIfEitherScoreAboveMark", testZeroingFailsIfEitherScoreAboveMark),
         ("testZeroingPassesOnlyWhenBothMeetMarks", testZeroingPassesOnlyWhenBothMeetMarks),
         ("testReturnsNilWhenScoresNotYetEntered", testReturnsNilWhenScoresNotYetEntered),
     ]

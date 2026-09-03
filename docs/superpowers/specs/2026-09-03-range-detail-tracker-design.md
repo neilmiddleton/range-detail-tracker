@@ -37,10 +37,11 @@ Each practice is configured with a **scoring type**, set during
 Session Setup:
 
 - **Standard** — one score per firing, with a configured pass mark.
-  Passed if `score >= passMark`.
+  Lower is better (e.g. group size); passed if `score <= passMark`.
 - **Zeroing** — two scores per firing, ES and PV, each with its own
-  configured pass mark. Passed only if **both** individually meet
-  their pass mark (`esScore >= esPassMark AND pvScore >= pvPassMark`).
+  configured pass mark, lower is better. Passed only if **both**
+  individually meet their pass mark
+  (`esScore <= esPassMark AND pvScore <= pvPassMark`).
 
 Pass/fail is always derived from the recorded score(s) against the
 practice's configured pass mark(s) — the RCO enters scores, never a

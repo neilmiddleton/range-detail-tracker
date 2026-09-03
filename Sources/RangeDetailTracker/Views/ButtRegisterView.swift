@@ -44,6 +44,7 @@ struct ButtRegisterView: View {
         }
         .padding()
         .frame(minWidth: 700, minHeight: 400)
+        .dynamicTypeSize(.large)
         .alert("Export Failed", isPresented: Binding(
             get: { exportError != nil },
             set: { if !$0 { exportError = nil } }

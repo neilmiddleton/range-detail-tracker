@@ -40,14 +40,20 @@ struct SessionSetupView: View {
             .padding()
             .frame(minWidth: 480, minHeight: 240)
             .tint(Theme.accentFill)
+            .dynamicTypeSize(.large)
         } else {
             Form {
                 Section {
-                    Stepper("Lane count: \(laneCount)", value: $laneCount, in: 1...10)
+                    HStack(spacing: 12) {
+                        Text("Lane count: \(laneCount)")
+                        Stepper("", value: $laneCount, in: 1...10)
+                            .labelsHidden()
+                    }
                 } header: {
                     SectionHeader(title: "Lanes")
                 }
                 Section {
+                    practiceColumnHeader
                     ForEach($practiceDrafts) { $draft in
                         practiceRow($draft)
                     }
@@ -61,6 +67,10 @@ struct SessionSetupView: View {
                 Section {
                     TextEditor(text: $cadetNamesText)
                         .frame(minHeight: 120)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
+                        )
                 } header: {
                     SectionHeader(title: "Cadets (one name per line)")
                 }
@@ -72,8 +82,9 @@ struct SessionSetupView: View {
                 .disabled(!isValid)
             }
             .padding()
-            .frame(minWidth: 480, minHeight: 480)
+            .frame(minWidth: 560, minHeight: 520)
             .tint(Theme.accentFill)
+            .dynamicTypeSize(.large)
             .onAppear {
                 if resumableSession == nil {
                     resumableSession = SessionPersistence.load()
@@ -82,24 +93,53 @@ struct SessionSetupView: View {
         }
     }
 
+    private let nameColumnWidth: CGFloat = 90
+    private let scoringColumnWidth: CGFloat = 130
+    private let markColumnWidth: CGFloat = 130
+    private let practiceNameMaxLength = 10
+
+    private var practiceColumnHeader: some View {
+        HStack(spacing: 12) {
+            Text("Name").frame(width: nameColumnWidth, alignment: .leading)
+            Text("Scoring").frame(width: scoringColumnWidth, alignment: .leading)
+            Text("Pass Mark").frame(width: markColumnWidth, alignment: .leading)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
     @ViewBuilder
     private func practiceRow(_ draft: Binding<PracticeDraft>) -> some View {
-        HStack {
-            TextField("Name (e.g. GP1)", text: draft.name)
-                .frame(minWidth: 120, maxWidth: 260)
+        HStack(spacing: 12) {
+            TextField("e.g. GP1", text: draft.name)
+                .labelsHidden()
+                .frame(width: nameColumnWidth)
+                .onChange(of: draft.wrappedValue.name) { _, newValue in
+                    if newValue.count > practiceNameMaxLength {
+                        draft.wrappedValue.name = String(newValue.prefix(practiceNameMaxLength))
+                    }
+                }
             Picker("Scoring", selection: draft.scoringType) {
                 Text("Standard").tag(ScoringType.standard)
                 Text("Zeroing").tag(ScoringType.zeroing)
             }
             .labelsHidden()
+            .frame(width: scoringColumnWidth)
             if draft.wrappedValue.scoringType == .standard {
                 TextField("Pass mark", value: draft.passMark, format: .number)
-                    .frame(width: 80)
+                    .labelsHidden()
+                    .frame(width: markColumnWidth)
             } else {
-                TextField("ES pass mark", value: draft.esPassMark, format: .number)
-                    .frame(width: 90)
-                TextField("PV pass mark", value: draft.pvPassMark, format: .number)
-                    .frame(width: 90)
+                HStack(spacing: 6) {
+                    Text("ES").foregroundStyle(.secondary)
+                    TextField("ES", value: draft.esPassMark, format: .number)
+                        .labelsHidden()
+                        .frame(width: markColumnWidth)
+                    Text("PV").foregroundStyle(.secondary)
+                    TextField("PV", value: draft.pvPassMark, format: .number)
+                        .labelsHidden()
+                        .frame(width: markColumnWidth)
+                }
             }
         }
     }

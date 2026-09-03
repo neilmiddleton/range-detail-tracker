@@ -22,7 +22,7 @@ final class SessionStoreTests: XCTestCase {
         let (store, _) = makeStore(laneCount: 1)
         store.confirmDraft()
         let firing = try XCTUnwrap(store.session.details.first?.firings.first)
-        store.recordScore(firing: firing, score: 25, esScore: nil, pvScore: nil)
+        store.recordScore(firing: firing, score: 15, esScore: nil, pvScore: nil)
         XCTAssertEqual(firing.outcome, .pass)
     }
 

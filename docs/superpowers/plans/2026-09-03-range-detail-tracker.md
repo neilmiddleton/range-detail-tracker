@@ -560,6 +560,8 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--run-tests") {
 
 `Sources/RangeDetailTracker/Tests/ModelPersistenceTests.swift`:
 ```swift
+import Foundation
+
 final class ModelPersistenceTests: XCTestCase {
     func testSessionRoundTripsThroughJSON() throws {
         let session = Session(laneCount: 5)
@@ -680,6 +682,8 @@ struct FiringRecord: Identifiable, Equatable {
 
 `Sources/RangeDetailTracker/Tests/ScoringRuleTests.swift`:
 ```swift
+import Foundation
+
 final class ScoringRuleTests: XCTestCase {
     func standardPractice(passMark: Int) -> PracticeSnapshot {
         PracticeSnapshot(id: UUID(), name: "AR1", order: 0, scoringType: .standard, passMark: passMark, esPassMark: nil, pvPassMark: nil)
@@ -789,6 +793,8 @@ git commit -m "Add domain snapshots and score-based pass/fail derivation"
 
 `Sources/RangeDetailTracker/Tests/ProgressionRuleTests.swift`:
 ```swift
+import Foundation
+
 final class ProgressionRuleTests: XCTestCase {
     let ar1 = PracticeSnapshot(id: UUID(), name: "AR1", order: 0, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
     let ar2 = PracticeSnapshot(id: UUID(), name: "AR2", order: 1, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
@@ -909,6 +915,8 @@ git commit -m "Add progression rule: block skip-ahead, resolve completed cadets 
 
 `Sources/RangeDetailTracker/Tests/FairnessRankingTests.swift`:
 ```swift
+import Foundation
+
 final class FairnessRankingTests: XCTestCase {
     func firing(cadetID: UUID, sequenceNumber: Int) -> FiringRecord {
         FiringRecord(id: UUID(), detailID: UUID(), sequenceNumber: sequenceNumber, firedAt: .now, laneNumber: 1, cadetID: cadetID, practiceID: UUID(), score: 20, esScore: nil, pvScore: nil, outcome: .pass)
@@ -1047,6 +1055,8 @@ struct DraftDetail: Equatable {
 
 `Sources/RangeDetailTracker/Tests/DraftDetailGeneratorTests.swift`:
 ```swift
+import Foundation
+
 final class DraftDetailGeneratorTests: XCTestCase {
     let ar1 = PracticeSnapshot(id: UUID(), name: "AR1", order: 0, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)
     let ar2 = PracticeSnapshot(id: UUID(), name: "AR2", order: 1, scoringType: .standard, passMark: 20, esPassMark: nil, pvPassMark: nil)

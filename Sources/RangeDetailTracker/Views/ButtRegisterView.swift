@@ -14,10 +14,13 @@ struct ButtRegisterView: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                Text("Butt Register").font(.title2)
+                SectionHeader(title: "Butt Register")
                 Spacer()
                 Button("Export CSV") { exportCSV() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accentFill)
                 Button("Done") { dismiss() }
+                    .buttonStyle(.bordered)
             }
             Table(rows) {
                 TableColumn("Detail") { Text("\($0.detailSequenceNumber)") }
@@ -27,7 +30,16 @@ struct ButtRegisterView: View {
                 TableColumn("Score") { Text($0.score.map(String.init) ?? "") }
                 TableColumn("ES") { Text($0.esScore.map(String.init) ?? "") }
                 TableColumn("PV") { Text($0.pvScore.map(String.init) ?? "") }
-                TableColumn("Outcome") { Text($0.outcome?.rawValue ?? "") }
+                TableColumn("Outcome") { row in
+                    switch row.outcome {
+                    case .pass:
+                        Label("Pass", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.pass)
+                    case .fail:
+                        Label("Fail", systemImage: "xmark.circle.fill").foregroundStyle(Theme.fail)
+                    case nil:
+                        Text("")
+                    }
+                }
             }
         }
         .padding()

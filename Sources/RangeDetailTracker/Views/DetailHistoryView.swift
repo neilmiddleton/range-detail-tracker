@@ -6,7 +6,7 @@ struct DetailHistoryView: View {
     var body: some View {
         let details = store.session.details.sorted { $0.sequenceNumber > $1.sequenceNumber }
         VStack(alignment: .leading, spacing: 8) {
-            Text("History").font(.title2)
+            SectionHeader(title: "History")
             if details.isEmpty {
                 Text("No details fired yet.").foregroundStyle(.secondary)
             }
@@ -15,7 +15,11 @@ struct DetailHistoryView: View {
                     ForEach(detail.firings.sorted { $0.laneNumber < $1.laneNumber }) { firing in
                         let cadetName = store.session.cadets.first { $0.id == firing.cadetID }?.name ?? "?"
                         let practiceName = store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
-                        Text("Lane \(firing.laneNumber): \(cadetName) — \(practiceName) — \(outcomeText(firing))")
+                        HStack {
+                            Text("Lane \(firing.laneNumber): \(cadetName) — \(practiceName)")
+                            Spacer()
+                            outcomeLabel(firing)
+                        }
                     }
                 }
             }
@@ -23,11 +27,15 @@ struct DetailHistoryView: View {
         .padding()
     }
 
-    private func outcomeText(_ firing: Firing) -> String {
+    @ViewBuilder
+    private func outcomeLabel(_ firing: Firing) -> some View {
         switch firing.outcome {
-        case .pass: return "PASS"
-        case .fail: return "FAIL"
-        case nil: return "pending"
+        case .pass:
+            Label("Pass", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.pass)
+        case .fail:
+            Label("Fail", systemImage: "xmark.circle.fill").foregroundStyle(Theme.fail)
+        case nil:
+            Text("Pending").foregroundStyle(.secondary)
         }
     }
 }

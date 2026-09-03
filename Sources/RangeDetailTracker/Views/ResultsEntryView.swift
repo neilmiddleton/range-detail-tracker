@@ -7,7 +7,7 @@ struct ResultsEntryView: View {
         let firings = store.latestDetailFirings
         if !firings.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Enter Results").font(.title2)
+                SectionHeader(title: "Enter Results")
                 ForEach(firings) { firing in
                     resultRow(firing)
                 }
@@ -40,8 +40,11 @@ struct ResultsEntryView: View {
                 ))
             }
             if let outcome = firing.outcome {
-                Text(outcome == .pass ? "✓ Pass" : "✗ Fail")
-                    .foregroundStyle(outcome == .pass ? .green : .red)
+                Label(
+                    outcome == .pass ? "Pass" : "Fail",
+                    systemImage: outcome == .pass ? "checkmark.circle.fill" : "xmark.circle.fill"
+                )
+                .foregroundStyle(outcome == .pass ? Theme.pass : Theme.fail)
             }
         }
     }

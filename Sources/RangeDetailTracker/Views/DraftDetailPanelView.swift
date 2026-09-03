@@ -5,7 +5,7 @@ struct DraftDetailPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Up Next").font(.title2)
+            SectionHeader(title: "Up Next")
             let draft = store.displayedDraft
             if draft.firings.allSatisfy({ $0.cadetID == nil }) {
                 Text("No cadets eligible for the active lanes.")
@@ -47,6 +47,8 @@ struct DraftDetailPanelView: View {
             Button("Confirm Fired") {
                 store.confirmDraft()
             }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.accentFill)
             .disabled(store.displayedDraft.firings.allSatisfy { $0.cadetID == nil } || store.hasPendingResults)
             if store.hasPendingResults {
                 Text("Score all firings from the previous detail before confirming a new one.")

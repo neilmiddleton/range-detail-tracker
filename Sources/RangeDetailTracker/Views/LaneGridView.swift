@@ -28,16 +28,23 @@ struct LaneGridView: View {
                     set: { _ in store.toggleLane(lane.number) }
                 ))
                 .labelsHidden()
+                .tint(Theme.accentFill)
             }
             if lane.active {
                 Text(cadetName ?? "Idle")
                 Text(practiceName ?? "—").font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("Out of commission").font(.caption).foregroundStyle(.red)
+                Label("Out of commission", systemImage: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Theme.fail)
             }
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(lane.active && cadetName != nil ? Theme.accentFill.opacity(0.6) : .clear, lineWidth: 2)
+        )
     }
 }

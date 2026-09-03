@@ -28,23 +28,36 @@ struct RosterPanelView: View {
                     }
                 }
                 .labelsHidden()
+                .tint(Theme.accentFill)
             }
             TableColumnForEach(practices) { practice in
                 TableColumn(practice.name) { cadet in
-                    Text(latestOutcomeSymbol(practiceID: practice.id, for: cadet))
+                    outcomeIcon(for: latestOutcome(practiceID: practice.id, for: cadet))
                 }
             }
         }
     }
 
-    private func latestOutcomeSymbol(practiceID: UUID, for cadet: Cadet) -> String {
+    @ViewBuilder
+    private func outcomeIcon(for outcome: Outcome?) -> some View {
+        switch outcome {
+        case .pass:
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.pass)
+        case .fail:
+            Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.fail)
+        case nil:
+            Text("—").foregroundStyle(.tertiary)
+        }
+    }
+
+    private func latestOutcome(practiceID: UUID, for cadet: Cadet) -> Outcome? {
         let records = firingRecords(for: cadet).filter { $0.practiceID == practiceID }
         if records.contains(where: { $0.outcome == .pass }) {
-            return "✓"
+            return .pass
         } else if records.contains(where: { $0.outcome == .fail }) {
-            return "✗"
+            return .fail
         } else {
-            return ""
+            return nil
         }
     }
 

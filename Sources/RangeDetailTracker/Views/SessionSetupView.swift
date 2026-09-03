@@ -22,44 +22,58 @@ struct SessionSetupView: View {
             RangeView(store: store)
         } else if let resumableSession, !startingFresh {
             VStack(spacing: 16) {
-                Text("A previous session was found.").font(.title2)
+                SectionHeader(title: "A previous session was found")
                 Text("Resume it, or start a new session (the previous session's data stays saved on disk).")
                     .foregroundStyle(.secondary)
                 HStack {
                     Button("Resume Previous Session") {
                         store = SessionStore(session: resumableSession)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accentFill)
                     Button("Start New Session") {
                         startingFresh = true
                     }
+                    .buttonStyle(.bordered)
                 }
             }
             .padding()
             .frame(minWidth: 480, minHeight: 240)
+            .tint(Theme.accentFill)
         } else {
             Form {
-                Section("Lanes") {
+                Section {
                     Stepper("Lane count: \(laneCount)", value: $laneCount, in: 1...10)
+                } header: {
+                    SectionHeader(title: "Lanes")
                 }
-                Section("Practices") {
+                Section {
                     ForEach($practiceDrafts) { $draft in
                         practiceRow($draft)
                     }
                     Button("Add practice") {
                         practiceDrafts.append(PracticeDraft())
                     }
+                    .buttonStyle(.bordered)
+                } header: {
+                    SectionHeader(title: "Practices")
                 }
-                Section("Cadets (one name per line)") {
+                Section {
                     TextEditor(text: $cadetNamesText)
                         .frame(minHeight: 120)
+                } header: {
+                    SectionHeader(title: "Cadets (one name per line)")
                 }
                 Button("Start Session") {
                     store = SessionStore(session: makeSession())
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.accentFill)
                 .disabled(!isValid)
             }
             .padding()
             .frame(minWidth: 480, minHeight: 480)
+            .tint(Theme.accentFill)
             .onAppear {
                 if resumableSession == nil {
                     resumableSession = SessionPersistence.load()

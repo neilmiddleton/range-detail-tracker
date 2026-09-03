@@ -27,11 +27,17 @@ struct RangeView: View {
             .frame(minWidth: 320)
         }
         .frame(minWidth: 800, minHeight: 500)
+        .tint(Theme.accentFill)
         .toolbar {
-            Button("Butt Register") { showingButtRegister = true }
+            Button {
+                showingButtRegister = true
+            } label: {
+                Label("Butt Register", systemImage: "list.bullet.clipboard")
+            }
         }
         .sheet(isPresented: $showingButtRegister) {
             ButtRegisterView(store: store)
+                .tint(Theme.accentFill)
         }
     }
 }

@@ -1,6 +1,5 @@
 import SwiftUI
 
-@available(macOS 14.4, *)
 struct RosterPanelView: View {
     let store: SessionStore
 

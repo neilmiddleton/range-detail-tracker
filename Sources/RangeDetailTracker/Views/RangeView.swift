@@ -1,6 +1,5 @@
 import SwiftUI
 
-@available(macOS 14.4, *)
 struct RangeView: View {
     @Bindable var store: SessionStore
 

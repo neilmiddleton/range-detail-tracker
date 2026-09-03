@@ -9,5 +9,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("ScoringRuleTests") {
+        for (name, method) in ScoringRuleTests.allTests {
+            TestRunner.shared.run(name) { try method(ScoringRuleTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

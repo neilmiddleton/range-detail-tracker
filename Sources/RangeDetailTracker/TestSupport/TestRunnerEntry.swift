@@ -39,5 +39,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("ButtRegisterTests") {
+        for (name, method) in ButtRegisterTests.allTests {
+            TestRunner.shared.run(name) { try method(ButtRegisterTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

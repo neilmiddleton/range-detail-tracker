@@ -6,10 +6,13 @@ final class SessionStore {
     let session: Session
     private let persist: (Session) -> Void
     private var manualEdits: [Int: DraftFiring] = [:]
+    private var cachedDraft: DraftDetail
 
     init(session: Session, persist: @escaping (Session) -> Void = SessionPersistence.save) {
         self.session = session
         self.persist = persist
+        self.cachedDraft = DraftDetail(firings: [])
+        self.cachedDraft = computeDraft()
     }
 
     private var practiceSnapshots: [PracticeSnapshot] {
@@ -34,9 +37,16 @@ final class SessionStore {
         }
     }
 
-    /// The live, freshly computed "up next" detail — recomputes on every access.
-    var draftDetail: DraftDetail {
+    private func computeDraft() -> DraftDetail {
         DraftDetailGenerator.nextDetail(cadets: cadetSnapshots, practices: practiceSnapshots, lanes: laneSnapshots, firings: firingRecords)
+    }
+
+    /// The "up next" detail. Held static while the previous detail is still being scored,
+    /// so the cadets prepping for it aren't watching their lane/practice assignment change
+    /// under them — it only regenerates once every pending score is in, or when the RCO
+    /// makes a deliberate change (toggling a lane, setting an override).
+    var draftDetail: DraftDetail {
+        cachedDraft
     }
 
     /// `draftDetail` with any in-progress manual edits applied, for display and confirm.
@@ -59,6 +69,7 @@ final class SessionStore {
         session.details.append(detail)
         clearConsumedOverrides(for: detail)
         manualEdits.removeAll()
+        cachedDraft = computeDraft()
         persist(session)
     }
 
@@ -76,12 +87,19 @@ final class SessionStore {
         firing.pvScore = pvScore
         let snapshot = PracticeSnapshot(id: practice.id, name: practice.name, order: practice.order, scoringType: practice.scoringType, passMark: practice.passMark, esPassMark: practice.esPassMark, pvPassMark: practice.pvPassMark)
         firing.outcome = ScoringRule.outcome(for: snapshot, score: score, esScore: esScore, pvScore: pvScore)
+        // Once every firing on the current detail has a result, refresh the next-detail
+        // draft so it reflects up-to-date progression — but not before, so cadets already
+        // prepping for it don't see their assignment shift mid-detail.
+        if !hasPendingResults {
+            cachedDraft = computeDraft()
+        }
         persist(session)
     }
 
     func toggleLane(_ number: Int) {
         guard let lane = session.lanes.first(where: { $0.number == number }) else { return }
         lane.active.toggle()
+        cachedDraft = computeDraft()
         persist(session)
     }
 
@@ -116,6 +134,7 @@ final class SessionStore {
     func setOverride(cadetID: UUID, practiceID: UUID?) {
         guard let cadet = session.cadets.first(where: { $0.id == cadetID }) else { return }
         cadet.nextOverridePracticeID = practiceID
+        cachedDraft = computeDraft()
         persist(session)
     }
 }

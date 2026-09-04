@@ -81,6 +81,35 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.nextDetailSequenceNumber, 2)
     }
 
+    func testDraftStaysStaticUntilAllPendingResultsEntered() throws {
+        let session = Session(laneCount: 2)
+        let ar1 = Practice(name: "AR1", order: 0, scoringType: .standard, passMark: 20)
+        let ar2 = Practice(name: "AR2", order: 1, scoringType: .standard, passMark: 20)
+        session.practices.append(contentsOf: [ar1, ar2])
+        session.lanes.append(Lane(number: 1))
+        session.lanes.append(Lane(number: 2))
+        let cadetA = Cadet(name: "Cadet A")
+        let cadetB = Cadet(name: "Cadet B")
+        session.cadets.append(contentsOf: [cadetA, cadetB])
+        let store = SessionStore(session: session, persist: { _ in })
+
+        store.confirmDraft()
+        let firingA = try XCTUnwrap(store.session.details.first?.firings.first { $0.cadetID == cadetA.id })
+        let firingB = try XCTUnwrap(store.session.details.first?.firings.first { $0.cadetID == cadetB.id })
+
+        store.recordScore(firing: firingA, score: 10, esScore: nil, pvScore: nil)
+        // Cadet B is still pending, so the next-detail draft must not reshuffle yet —
+        // it should still show Cadet A queued for AR1, not the AR2 they just earned.
+        XCTAssertTrue(store.hasPendingResults)
+        XCTAssertEqual(store.draftDetail.firings.first { $0.cadetID == cadetA.id }?.practiceID, ar1.id)
+
+        store.recordScore(firing: firingB, score: 25, esScore: nil, pvScore: nil)
+        // Now every firing on the current detail has a result: the draft refreshes.
+        XCTAssertFalse(store.hasPendingResults)
+        XCTAssertEqual(store.draftDetail.firings.first { $0.cadetID == cadetA.id }?.practiceID, ar2.id)
+        XCTAssertEqual(store.draftDetail.firings.first { $0.cadetID == cadetB.id }?.practiceID, ar1.id)
+    }
+
     static let allTests: [(String, (SessionStoreTests) -> () throws -> Void)] = [
         ("testConfirmDraftCreatesDetailWithFirings", testConfirmDraftCreatesDetailWithFirings),
         ("testRecordScoreSetsDerivedOutcome", testRecordScoreSetsDerivedOutcome),
@@ -90,5 +119,6 @@ final class SessionStoreTests: XCTestCase {
         ("testPersistIsCalledOnEveryMutation", testPersistIsCalledOnEveryMutation),
         ("testRecordScoreWithZeroClearsPendingAndFails", testRecordScoreWithZeroClearsPendingAndFails),
         ("testDetailSequenceNumbersBeforeAndAfterConfirm", testDetailSequenceNumbersBeforeAndAfterConfirm),
+        ("testDraftStaysStaticUntilAllPendingResultsEntered", testDraftStaysStaticUntilAllPendingResultsEntered),
     ]
 }

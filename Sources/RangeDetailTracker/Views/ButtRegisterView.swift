@@ -11,6 +11,10 @@ struct ButtRegisterView: View {
         ButtRegisterBuilder.rows(for: store.session)
     }
 
+    private var practices: [Practice] {
+        store.session.practices.sorted { $0.order < $1.order }
+    }
+
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
@@ -22,22 +26,14 @@ struct ButtRegisterView: View {
                 Button("Done") { dismiss() }
                     .buttonStyle(.bordered)
             }
+            // One row per cadet, one column per practice, showing their best
+            // (lowest) score on that practice — the register a coach hands
+            // out at the end of the day, not a log of every individual shot.
             Table(rows) {
-                TableColumn("Detail") { Text("\($0.detailSequenceNumber)") }
-                TableColumn("Lane") { Text("\($0.laneNumber)") }
                 TableColumn("Cadet") { Text($0.cadetName) }
-                TableColumn("Practice") { Text($0.practiceName) }
-                TableColumn("Score") { Text($0.score.map(String.init) ?? "") }
-                TableColumn("ES") { Text($0.esScore.map(String.init) ?? "") }
-                TableColumn("PV") { Text($0.pvScore.map(String.init) ?? "") }
-                TableColumn("Outcome") { row in
-                    switch row.outcome {
-                    case .pass:
-                        Label("Pass", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.pass)
-                    case .fail:
-                        Label("Fail", systemImage: "xmark.circle.fill").foregroundStyle(Theme.fail)
-                    case nil:
-                        Text("")
+                TableColumnForEach(practices) { practice in
+                    TableColumn(practice.name) { row in
+                        bestResultCell(row.bestResult(for: practice.id))
                     }
                 }
             }
@@ -55,12 +51,27 @@ struct ButtRegisterView: View {
         }
     }
 
+    @ViewBuilder
+    private func bestResultCell(_ result: BestPracticeResult?) -> some View {
+        if let result, result.hasResult {
+            HStack(spacing: 4) {
+                Text(result.displayValue)
+                if let outcome = result.outcome {
+                    Image(systemName: outcome == .pass ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(outcome == .pass ? Theme.pass : Theme.fail)
+                }
+            }
+        } else {
+            Text("—").foregroundStyle(.secondary)
+        }
+    }
+
     private func exportCSV() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.nameFieldStringValue = "butt-register.csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let csv = ButtRegisterCSVExporter.csv(for: rows)
+        let csv = ButtRegisterCSVExporter.csv(for: rows, practices: practices)
         do {
             try csv.write(to: url, atomically: true, encoding: .utf8)
         } catch {

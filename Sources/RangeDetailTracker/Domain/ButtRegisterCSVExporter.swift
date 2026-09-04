@@ -1,18 +1,10 @@
 enum ButtRegisterCSVExporter {
-    static func csv(for rows: [ButtRegisterRow]) -> String {
-        var lines = ["Detail,Lane,Cadet,Practice,Score,ES,PV,Outcome"]
+    static func csv(for rows: [ButtRegisterRow], practices: [Practice]) -> String {
+        let orderedPractices = practices.sorted { $0.order < $1.order }
+        var lines = [(["Cadet"] + orderedPractices.map(\.name)).map(csvField).joined(separator: ",")]
         for row in rows {
-            let fields = [
-                String(row.detailSequenceNumber),
-                String(row.laneNumber),
-                csvField(row.cadetName),
-                csvField(row.practiceName),
-                row.score.map(String.init) ?? "",
-                row.esScore.map(String.init) ?? "",
-                row.pvScore.map(String.init) ?? "",
-                row.outcome?.rawValue ?? "",
-            ]
-            lines.append(fields.joined(separator: ","))
+            let fields = [row.cadetName] + orderedPractices.map { row.bestResult(for: $0.id)?.displayValue ?? "" }
+            lines.append(fields.map(csvField).joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"
     }

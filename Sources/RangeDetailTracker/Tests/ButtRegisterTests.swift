@@ -1,52 +1,97 @@
+import Foundation
+
 final class ButtRegisterTests: XCTestCase {
-    func makeSessionWithOneFiring() throws -> Session {
+    func addFiring(to session: Session, sequenceNumber: Int, cadetID: UUID, practiceID: UUID, score: Int? = nil, esScore: Int? = nil, pvScore: Int? = nil, outcome: Outcome?) {
+        let detail = session.details.first { $0.sequenceNumber == sequenceNumber } ?? {
+            let new = Detail(sequenceNumber: sequenceNumber)
+            session.details.append(new)
+            return new
+        }()
+        let firing = Firing(laneNumber: 1, cadetID: cadetID, practiceID: practiceID)
+        firing.score = score
+        firing.esScore = esScore
+        firing.pvScore = pvScore
+        firing.outcome = outcome
+        detail.firings.append(firing)
+    }
+
+    func testReportsCadetNameAndBestStandardScore() throws {
         let session = Session(laneCount: 1)
-        let practice = Practice(name: "AR1", order: 0, scoringType: .standard, passMark: 20)
+        let practice = Practice(name: "GP1", order: 0, scoringType: .standard, passMark: 20)
         let cadet = Cadet(name: "Smith, J")
         session.practices.append(practice)
         session.cadets.append(cadet)
+        addFiring(to: session, sequenceNumber: 1, cadetID: cadet.id, practiceID: practice.id, score: 25, outcome: .fail)
+        addFiring(to: session, sequenceNumber: 2, cadetID: cadet.id, practiceID: practice.id, score: 15, outcome: .pass)
 
-        let detail = Detail(sequenceNumber: 1)
-        let firing = Firing(laneNumber: 1, cadetID: cadet.id, practiceID: practice.id)
-        firing.score = 25
-        firing.outcome = .pass
-        detail.firings.append(firing)
-        session.details.append(detail)
-
-        return session
-    }
-
-    func testRowsAreOrderedByDetailThenLane() throws {
-        let session = try makeSessionWithOneFiring()
         let rows = ButtRegisterBuilder.rows(for: session)
         XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows.first?.detailSequenceNumber, 1)
-        XCTAssertEqual(rows.first?.laneNumber, 1)
         XCTAssertEqual(rows.first?.cadetName, "Smith, J")
-        XCTAssertEqual(rows.first?.practiceName, "AR1")
-        XCTAssertEqual(rows.first?.score, 25)
-        XCTAssertEqual(rows.first?.outcome, .pass)
+        let best = rows.first?.bestResult(for: practice.id)
+        XCTAssertEqual(best?.score, 15)
+        XCTAssertEqual(best?.outcome, .pass)
     }
 
-    func testCSVEscapesCadetNamesContainingCommas() throws {
-        let session = try makeSessionWithOneFiring()
+    func testVoidZeroScoresAreExcludedFromBestScore() throws {
+        let session = Session(laneCount: 1)
+        let practice = Practice(name: "GP1", order: 0, scoringType: .standard, passMark: 20)
+        let cadet = Cadet(name: "Jones")
+        session.practices.append(practice)
+        session.cadets.append(cadet)
+        // A malfunctioned (score 0) attempt should never count as their "best".
+        addFiring(to: session, sequenceNumber: 1, cadetID: cadet.id, practiceID: practice.id, score: 0, outcome: .fail)
+        addFiring(to: session, sequenceNumber: 2, cadetID: cadet.id, practiceID: practice.id, score: 18, outcome: .pass)
+
         let rows = ButtRegisterBuilder.rows(for: session)
-        let csv = ButtRegisterCSVExporter.csv(for: rows)
-        XCTAssertTrue(csv.contains("\"Smith, J\""))
-        XCTAssertTrue(csv.hasPrefix("Detail,Lane,Cadet,Practice,Score,ES,PV,Outcome"))
+        XCTAssertEqual(rows.first?.bestResult(for: practice.id)?.score, 18)
     }
 
-    func testCSVEscapesCadetNamesContainingDoubleQuotes() throws {
-        let session = try makeSessionWithOneFiring()
-        session.cadets[0].name = "Smith \"Ace\" J"
+    func testReportsBestZeroingPairByLowestCombinedScore() throws {
+        let session = Session(laneCount: 1)
+        let practice = Practice(name: "Zero", order: 0, scoringType: .zeroing, esPassMark: 10, pvPassMark: 10)
+        let cadet = Cadet(name: "Patel")
+        session.practices.append(practice)
+        session.cadets.append(cadet)
+        addFiring(to: session, sequenceNumber: 1, cadetID: cadet.id, practiceID: practice.id, esScore: 15, pvScore: 15, outcome: .fail)
+        addFiring(to: session, sequenceNumber: 2, cadetID: cadet.id, practiceID: practice.id, esScore: 8, pvScore: 9, outcome: .pass)
+
         let rows = ButtRegisterBuilder.rows(for: session)
-        let csv = ButtRegisterCSVExporter.csv(for: rows)
-        XCTAssertTrue(csv.contains("\"Smith \"\"Ace\"\" J\""))
+        let best = rows.first?.bestResult(for: practice.id)
+        XCTAssertEqual(best?.esScore, 8)
+        XCTAssertEqual(best?.pvScore, 9)
+        XCTAssertEqual(best?.outcome, .pass)
+    }
+
+    func testCadetWithNoFiringsHasNoResult() throws {
+        let session = Session(laneCount: 1)
+        let practice = Practice(name: "GP1", order: 0, scoringType: .standard, passMark: 20)
+        let cadet = Cadet(name: "Never Fired")
+        session.practices.append(practice)
+        session.cadets.append(cadet)
+
+        let rows = ButtRegisterBuilder.rows(for: session)
+        XCTAssertFalse(rows.first?.bestResult(for: practice.id)?.hasResult ?? true)
+    }
+
+    func testCSVHasOneColumnPerPracticeAndEscapesCommas() throws {
+        let session = Session(laneCount: 1)
+        let practice = Practice(name: "GP1", order: 0, scoringType: .standard, passMark: 20)
+        let cadet = Cadet(name: "Smith, J")
+        session.practices.append(practice)
+        session.cadets.append(cadet)
+        addFiring(to: session, sequenceNumber: 1, cadetID: cadet.id, practiceID: practice.id, score: 15, outcome: .pass)
+
+        let rows = ButtRegisterBuilder.rows(for: session)
+        let csv = ButtRegisterCSVExporter.csv(for: rows, practices: session.practices)
+        XCTAssertTrue(csv.hasPrefix("Cadet,GP1"))
+        XCTAssertTrue(csv.contains("\"Smith, J\",15"))
     }
 
     static let allTests: [(String, (ButtRegisterTests) -> () throws -> Void)] = [
-        ("testRowsAreOrderedByDetailThenLane", testRowsAreOrderedByDetailThenLane),
-        ("testCSVEscapesCadetNamesContainingCommas", testCSVEscapesCadetNamesContainingCommas),
-        ("testCSVEscapesCadetNamesContainingDoubleQuotes", testCSVEscapesCadetNamesContainingDoubleQuotes),
+        ("testReportsCadetNameAndBestStandardScore", testReportsCadetNameAndBestStandardScore),
+        ("testVoidZeroScoresAreExcludedFromBestScore", testVoidZeroScoresAreExcludedFromBestScore),
+        ("testReportsBestZeroingPairByLowestCombinedScore", testReportsBestZeroingPairByLowestCombinedScore),
+        ("testCadetWithNoFiringsHasNoResult", testCadetWithNoFiringsHasNoResult),
+        ("testCSVHasOneColumnPerPracticeAndEscapesCommas", testCSVHasOneColumnPerPracticeAndEscapesCommas),
     ]
 }

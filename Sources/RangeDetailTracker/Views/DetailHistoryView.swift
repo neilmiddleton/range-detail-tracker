@@ -18,6 +18,7 @@ struct DetailHistoryView: View {
                 // the whole day's progress is readable at a glance.
                 Table(cadets) {
                     TableColumn("Cadet") { cadet in Text(cadet.name) }
+                        .width(min: cadetColumnWidth(for: cadets))
                     TableColumnForEach(details) { detail in
                         TableColumn("Detail \(detail.sequenceNumber)") { cadet in
                             outcomeBox(cadet: cadet, detail: detail)
@@ -29,6 +30,13 @@ struct DetailHistoryView: View {
             }
         }
         .padding()
+    }
+
+    /// A rough per-character estimate so the column never clips a cadet's name,
+    /// even though Table doesn't measure text itself before laying out columns.
+    private func cadetColumnWidth(for cadets: [Cadet]) -> CGFloat {
+        let longestName = cadets.map(\.name.count).max() ?? 6
+        return CGFloat(longestName) * 8 + 24
     }
 
     @ViewBuilder

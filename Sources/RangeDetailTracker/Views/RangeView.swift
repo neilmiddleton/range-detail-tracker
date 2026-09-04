@@ -6,7 +6,7 @@ struct RangeView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            HStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         ResultsEntryView(store: store)
@@ -15,7 +15,7 @@ struct RangeView: View {
                     }
                     .padding()
                 }
-                .frame(width: geometry.size.width / 2)
+                .frame(height: geometry.size.height / 2)
 
                 Divider()
 
@@ -27,7 +27,7 @@ struct RangeView: View {
                     }
                 }
                 .padding()
-                .frame(width: geometry.size.width / 2)
+                .frame(height: geometry.size.height / 2)
             }
         }
         .frame(minWidth: 800, minHeight: 500)

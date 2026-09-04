@@ -3,12 +3,17 @@ import SwiftUI
 struct LaneGridView: View {
     @Bindable var store: SessionStore
 
-    private let columns = [GridItem(.adaptive(minimum: 140), spacing: 12)]
+    private let laneWidth: CGFloat = 160
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(store.session.lanes.sorted { $0.number < $1.number }) { lane in
-                laneTile(lane)
+        // Lanes are laid out left-to-right in a single row, matching how
+        // firing points are physically arranged on the range.
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(store.session.lanes.sorted { $0.number < $1.number }) { lane in
+                    laneTile(lane)
+                        .frame(width: laneWidth)
+                }
             }
         }
     }

@@ -3,6 +3,8 @@ import SwiftUI
 struct DetailHistoryView: View {
     let store: SessionStore
 
+    private let detailColumnWidth: CGFloat = 90
+
     var body: some View {
         let details = store.session.details.sorted { $0.sequenceNumber < $1.sequenceNumber }
         let cadets = store.session.cadets.sorted { $0.name < $1.name }
@@ -20,6 +22,7 @@ struct DetailHistoryView: View {
                         TableColumn("Detail \(detail.sequenceNumber)") { cadet in
                             outcomeBox(cadet: cadet, detail: detail)
                         }
+                        .width(detailColumnWidth)
                     }
                 }
                 .frame(minHeight: CGFloat(cadets.count) * 32 + 40)

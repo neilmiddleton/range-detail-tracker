@@ -51,13 +51,20 @@ enum DraftDetailGenerator {
             let laneCountForPractice = min(queue.count, activeLanes.count - laneIndex)
             let laneBlock = Array(activeLanes[laneIndex..<(laneIndex + laneCountForPractice)])
 
+            // Fairness decides WHO fires this detail — that selection happens here,
+            // before stickiness ever comes into play, so a lower-priority cadet's
+            // lane preference can never bump a higher-priority cadet out of firing.
+            let selectedCadetIDs = Array(queue.prefix(laneCountForPractice))
+
             // A cadet who has previously fired a zeroing practice is tied to a
             // specific rifle kept on that lane, so keep them on it whenever
             // their sticky lane falls within this practice's block of lanes.
+            // It's only a preference for WHICH lane a selected cadet gets —
+            // if their lane isn't available, they still fire as normal.
             var laneNumberByCadet: [UUID: Int] = [:]
             var claimedLanes: Set<Int> = []
             var unplacedCadetIDs: [UUID] = []
-            for cadetID in queue {
+            for cadetID in selectedCadetIDs {
                 if let stickyLane = stickyLaneByCadet[cadetID],
                    laneBlock.contains(where: { $0.number == stickyLane }),
                    !claimedLanes.contains(stickyLane) {

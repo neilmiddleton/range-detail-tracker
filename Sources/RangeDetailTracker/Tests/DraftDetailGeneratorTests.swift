@@ -76,6 +76,19 @@ final class DraftDetailGeneratorTests: XCTestCase {
         XCTAssertEqual(draft.firings.first { $0.cadetID == cadetA.id }?.laneNumber, 1)
     }
 
+    func testStickyPreferenceNeverBumpsAHigherPriorityCadet() {
+        let zeroing = PracticeSnapshot(id: UUID(), name: "Zero", order: 0, scoringType: .zeroing, passMark: nil, esPassMark: 10, pvPassMark: 10)
+        let cadetX = CadetSnapshot(id: UUID(), name: "Never Fired", nextOverridePracticeID: nil)
+        let cadetY = CadetSnapshot(id: UUID(), name: "Sticky But Behind", nextOverridePracticeID: nil)
+        // Cadet Y previously zeroed (and failed) on lane 1, making it their sticky lane —
+        // but that also means they've already had a turn. Cadet X has never fired, so
+        // they have higher fairness priority for the one remaining lane. Stickiness is
+        // only a lane preference; it must never let Y take X's turn to fire at all.
+        let priorFiring = FiringRecord(id: UUID(), detailID: UUID(), sequenceNumber: 1, firedAt: .now, laneNumber: 1, cadetID: cadetY.id, practiceID: zeroing.id, score: nil, esScore: 20, pvScore: 20, outcome: .fail)
+        let draft = DraftDetailGenerator.nextDetail(cadets: [cadetX, cadetY], practices: [zeroing], lanes: lanes([1]), firings: [priorFiring])
+        XCTAssertEqual(draft.firings.first?.cadetID, cadetX.id)
+    }
+
     func testVoidAttemptDoesNotCountAgainstFairness() {
         let cadetA = CadetSnapshot(id: UUID(), name: "Malfunctioned", nextOverridePracticeID: nil)
         let cadetB = CadetSnapshot(id: UUID(), name: "Never Fired", nextOverridePracticeID: nil)
@@ -98,6 +111,7 @@ final class DraftDetailGeneratorTests: XCTestCase {
         ("testCompletedCadetPlacedOnFinalPractice", testCompletedCadetPlacedOnFinalPractice),
         ("testCadetStaysOnStickyLaneAfterZeroing", testCadetStaysOnStickyLaneAfterZeroing),
         ("testStickyLaneIgnoredWhenLaneUnavailable", testStickyLaneIgnoredWhenLaneUnavailable),
+        ("testStickyPreferenceNeverBumpsAHigherPriorityCadet", testStickyPreferenceNeverBumpsAHigherPriorityCadet),
         ("testVoidAttemptDoesNotCountAgainstFairness", testVoidAttemptDoesNotCountAgainstFairness),
     ]
 }

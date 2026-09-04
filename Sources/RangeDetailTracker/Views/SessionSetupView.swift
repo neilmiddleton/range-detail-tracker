@@ -100,6 +100,7 @@ struct SessionSetupView: View {
 
     private var practiceColumnHeader: some View {
         HStack(spacing: 12) {
+            Image(systemName: "minus.circle.fill").opacity(0)
             Text("Name").frame(width: nameColumnWidth, alignment: .leading)
             Text("Scoring").frame(width: scoringColumnWidth, alignment: .leading)
             Text("Pass Mark").frame(width: markColumnWidth, alignment: .leading)
@@ -111,6 +112,15 @@ struct SessionSetupView: View {
     @ViewBuilder
     private func practiceRow(_ draft: Binding<PracticeDraft>) -> some View {
         HStack(spacing: 12) {
+            Button {
+                practiceDrafts.removeAll { $0.id == draft.wrappedValue.id }
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(Theme.fail)
+            }
+            .buttonStyle(.plain)
+            .disabled(practiceDrafts.count <= 1)
+
             TextField("e.g. GP1", text: draft.name)
                 .labelsHidden()
                 .frame(width: nameColumnWidth)

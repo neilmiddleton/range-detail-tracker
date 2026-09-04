@@ -3,65 +3,52 @@ import SwiftUI
 struct DetailHistoryView: View {
     let store: SessionStore
 
-    private struct Row: Identifiable {
-        var id: UUID { firing.id }
-        let detailSequenceNumber: Int
-        let firing: Firing
-    }
-
-    private var rows: [Row] {
-        store.session.details
-            .sorted { $0.sequenceNumber > $1.sequenceNumber }
-            .flatMap { detail in
-                detail.firings
-                    .sorted { $0.laneNumber < $1.laneNumber }
-                    .map { Row(detailSequenceNumber: detail.sequenceNumber, firing: $0) }
-            }
-    }
-
     var body: some View {
-        let rows = rows
+        let details = store.session.details.sorted { $0.sequenceNumber < $1.sequenceNumber }
+        let cadets = store.session.cadets.sorted { $0.name < $1.name }
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "History")
-            if rows.isEmpty {
+            if details.isEmpty {
                 Text("No details fired yet.").foregroundStyle(.secondary)
             } else {
-                // Every fire from every detail so far, newest detail first —
-                // a single glanceable table rather than one you have to
-                // expand detail by detail.
-                Table(rows) {
-                    TableColumn("Detail") { row in Text("\(row.detailSequenceNumber)") }
-                    TableColumn("Lane") { row in Text("\(row.firing.laneNumber)") }
-                    TableColumn("Cadet") { row in Text(cadetName(for: row.firing)) }
-                    TableColumn("Practice") { row in Text(practiceName(for: row.firing)) }
-                    TableColumn("Score") { row in Text(row.firing.score.map(String.init) ?? "") }
-                    TableColumn("ES") { row in Text(row.firing.esScore.map(String.init) ?? "") }
-                    TableColumn("PV") { row in Text(row.firing.pvScore.map(String.init) ?? "") }
-                    TableColumn("Outcome") { row in outcomeLabel(row.firing) }
+                // Cadets down the left, one column per detail along the top —
+                // each cell is a pass/fail box naming the practice fired, so
+                // the whole day's progress is readable at a glance.
+                Table(cadets) {
+                    TableColumn("Cadet") { cadet in Text(cadet.name) }
+                    TableColumnForEach(details) { detail in
+                        TableColumn("Detail \(detail.sequenceNumber)") { cadet in
+                            outcomeBox(cadet: cadet, detail: detail)
+                        }
+                    }
                 }
-                .frame(minHeight: CGFloat(rows.count) * 28 + 30)
+                .frame(minHeight: CGFloat(cadets.count) * 32 + 40)
             }
         }
         .padding()
     }
 
-    private func cadetName(for firing: Firing) -> String {
-        store.session.cadets.first { $0.id == firing.cadetID }?.name ?? "?"
-    }
-
-    private func practiceName(for firing: Firing) -> String {
-        store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
-    }
-
     @ViewBuilder
-    private func outcomeLabel(_ firing: Firing) -> some View {
-        switch firing.outcome {
-        case .pass:
-            Label("Pass", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.pass)
-        case .fail:
-            Label("Fail", systemImage: "xmark.circle.fill").foregroundStyle(Theme.fail)
-        case nil:
-            Text("Pending").foregroundStyle(.secondary)
+    private func outcomeBox(cadet: Cadet, detail: Detail) -> some View {
+        if let firing = detail.firings.first(where: { $0.cadetID == cadet.id }) {
+            let practiceName = store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
+            Text(practiceName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity)
+                .background(boxColor(for: firing.outcome), in: RoundedRectangle(cornerRadius: 4))
+        } else {
+            Text("")
+        }
+    }
+
+    private func boxColor(for outcome: Outcome?) -> Color {
+        switch outcome {
+        case .pass: Theme.pass
+        case .fail: Theme.fail
+        case nil: Color.gray
         }
     }
 }

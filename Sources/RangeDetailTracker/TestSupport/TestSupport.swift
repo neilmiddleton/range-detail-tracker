@@ -16,6 +16,13 @@ func XCTAssertEqual<T: Equatable>(_ a: @autoclosure () -> T, _ b: @autoclosure (
     }
 }
 
+func XCTAssertNotEqual<T: Equatable>(_ a: @autoclosure () -> T, _ b: @autoclosure () -> T, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    let (av, bv) = (a(), b())
+    if av == bv {
+        TestRunner.shared.recordFailure("XCTAssertNotEqual failed: \(av) == \(bv). \(message)", file: file, line: line)
+    }
+}
+
 func XCTAssertNil(_ a: @autoclosure () -> Any?, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
     if a() != nil {
         TestRunner.shared.recordFailure("XCTAssertNil failed. \(message)", file: file, line: line)

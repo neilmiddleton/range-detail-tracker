@@ -14,4 +14,16 @@ enum ScoringRule {
             return (esScore <= esPassMark && pvScore <= pvPassMark) ? .pass : .fail
         }
     }
+
+    /// A zero score means the practice was never actually fired (e.g. a
+    /// stoppage) — the attempt is void and shouldn't count against the
+    /// cadet's place in the fairness rotation, as if they hadn't fired it.
+    static func isVoidAttempt(scoringType: ScoringType, score: Int?, esScore: Int?, pvScore: Int?) -> Bool {
+        switch scoringType {
+        case .standard:
+            return score == 0
+        case .zeroing:
+            return esScore == 0 || pvScore == 0
+        }
+    }
 }

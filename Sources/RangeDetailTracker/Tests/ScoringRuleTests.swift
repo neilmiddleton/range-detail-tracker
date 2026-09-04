@@ -46,6 +46,17 @@ final class ScoringRuleTests: XCTestCase {
         XCTAssertEqual(ScoringRule.outcome(for: practice, score: nil, esScore: 5, pvScore: 0), .fail)
     }
 
+    func testStandardZeroScoreIsAVoidAttempt() {
+        XCTAssertTrue(ScoringRule.isVoidAttempt(scoringType: .standard, score: 0, esScore: nil, pvScore: nil))
+        XCTAssertFalse(ScoringRule.isVoidAttempt(scoringType: .standard, score: 25, esScore: nil, pvScore: nil))
+    }
+
+    func testZeroingEitherZeroScoreIsAVoidAttempt() {
+        XCTAssertTrue(ScoringRule.isVoidAttempt(scoringType: .zeroing, score: nil, esScore: 0, pvScore: 5))
+        XCTAssertTrue(ScoringRule.isVoidAttempt(scoringType: .zeroing, score: nil, esScore: 5, pvScore: 0))
+        XCTAssertFalse(ScoringRule.isVoidAttempt(scoringType: .zeroing, score: nil, esScore: 5, pvScore: 5))
+    }
+
     static let allTests: [(String, (ScoringRuleTests) -> () throws -> Void)] = [
         ("testStandardPassesAtExactPassMark", testStandardPassesAtExactPassMark),
         ("testStandardFailsOneAbovePassMark", testStandardFailsOneAbovePassMark),
@@ -54,5 +65,7 @@ final class ScoringRuleTests: XCTestCase {
         ("testReturnsNilWhenScoresNotYetEntered", testReturnsNilWhenScoresNotYetEntered),
         ("testStandardScoreOfZeroIsAlwaysFail", testStandardScoreOfZeroIsAlwaysFail),
         ("testZeroingEitherScoreOfZeroIsAlwaysFail", testZeroingEitherScoreOfZeroIsAlwaysFail),
+        ("testStandardZeroScoreIsAVoidAttempt", testStandardZeroScoreIsAVoidAttempt),
+        ("testZeroingEitherZeroScoreIsAVoidAttempt", testZeroingEitherZeroScoreIsAVoidAttempt),
     ]
 }

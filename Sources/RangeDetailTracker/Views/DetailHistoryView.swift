@@ -3,27 +3,43 @@ import SwiftUI
 struct DetailHistoryView: View {
     let store: SessionStore
 
+    private struct Row: Identifiable {
+        var id: UUID { firing.id }
+        let detailSequenceNumber: Int
+        let firing: Firing
+    }
+
+    private var rows: [Row] {
+        store.session.details
+            .sorted { $0.sequenceNumber > $1.sequenceNumber }
+            .flatMap { detail in
+                detail.firings
+                    .sorted { $0.laneNumber < $1.laneNumber }
+                    .map { Row(detailSequenceNumber: detail.sequenceNumber, firing: $0) }
+            }
+    }
+
     var body: some View {
-        let details = store.session.details.sorted { $0.sequenceNumber > $1.sequenceNumber }
+        let rows = rows
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "History")
-            if details.isEmpty {
+            if rows.isEmpty {
                 Text("No details fired yet.").foregroundStyle(.secondary)
-            }
-            ForEach(details) { detail in
-                DisclosureGroup("Detail \(detail.sequenceNumber)") {
-                    let firings = detail.firings.sorted { $0.laneNumber < $1.laneNumber }
-                    Table(firings) {
-                        TableColumn("Lane") { firing in Text("\(firing.laneNumber)") }
-                        TableColumn("Cadet") { firing in Text(cadetName(for: firing)) }
-                        TableColumn("Practice") { firing in Text(practiceName(for: firing)) }
-                        TableColumn("Score") { firing in Text(firing.score.map(String.init) ?? "") }
-                        TableColumn("ES") { firing in Text(firing.esScore.map(String.init) ?? "") }
-                        TableColumn("PV") { firing in Text(firing.pvScore.map(String.init) ?? "") }
-                        TableColumn("Outcome") { firing in outcomeLabel(firing) }
-                    }
-                    .frame(minHeight: CGFloat(firings.count) * 28 + 30)
+            } else {
+                // Every fire from every detail so far, newest detail first —
+                // a single glanceable table rather than one you have to
+                // expand detail by detail.
+                Table(rows) {
+                    TableColumn("Detail") { row in Text("\(row.detailSequenceNumber)") }
+                    TableColumn("Lane") { row in Text("\(row.firing.laneNumber)") }
+                    TableColumn("Cadet") { row in Text(cadetName(for: row.firing)) }
+                    TableColumn("Practice") { row in Text(practiceName(for: row.firing)) }
+                    TableColumn("Score") { row in Text(row.firing.score.map(String.init) ?? "") }
+                    TableColumn("ES") { row in Text(row.firing.esScore.map(String.init) ?? "") }
+                    TableColumn("PV") { row in Text(row.firing.pvScore.map(String.init) ?? "") }
+                    TableColumn("Outcome") { row in outcomeLabel(row.firing) }
                 }
+                .frame(minHeight: CGFloat(rows.count) * 28 + 30)
             }
         }
         .padding()

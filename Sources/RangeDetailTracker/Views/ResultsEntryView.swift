@@ -7,7 +7,7 @@ struct ResultsEntryView: View {
         let firings = store.latestDetailFirings
         if !firings.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                SectionHeader(title: "Enter Results")
+                SectionHeader(title: "Enter Results — Detail \(store.currentDetailSequenceNumber ?? 0)")
                 ForEach(firings) { firing in
                     resultRow(firing)
                 }
@@ -25,18 +25,27 @@ struct ResultsEntryView: View {
         HStack {
             Text("Lane \(firing.laneNumber): \(cadetName)").frame(width: 220, alignment: .leading)
             if practice?.scoringType == .zeroing {
-                scoreField("ES", value: Binding(
-                    get: { firing.esScore ?? 0 },
-                    set: { store.recordScore(firing: firing, score: nil, esScore: $0, pvScore: firing.pvScore) }
+                scoreField("ES", text: Binding(
+                    get: { firing.esScore.map(String.init) ?? "" },
+                    set: { newValue in
+                        guard let intValue = Int(newValue.trimmingCharacters(in: .whitespaces)) else { return }
+                        store.recordScore(firing: firing, score: nil, esScore: intValue, pvScore: firing.pvScore)
+                    }
                 ))
-                scoreField("PV", value: Binding(
-                    get: { firing.pvScore ?? 0 },
-                    set: { store.recordScore(firing: firing, score: nil, esScore: firing.esScore, pvScore: $0) }
+                scoreField("PV", text: Binding(
+                    get: { firing.pvScore.map(String.init) ?? "" },
+                    set: { newValue in
+                        guard let intValue = Int(newValue.trimmingCharacters(in: .whitespaces)) else { return }
+                        store.recordScore(firing: firing, score: nil, esScore: firing.esScore, pvScore: intValue)
+                    }
                 ))
             } else {
-                scoreField("Score", value: Binding(
-                    get: { firing.score ?? 0 },
-                    set: { store.recordScore(firing: firing, score: $0, esScore: nil, pvScore: nil) }
+                scoreField("Score", text: Binding(
+                    get: { firing.score.map(String.init) ?? "" },
+                    set: { newValue in
+                        guard let intValue = Int(newValue.trimmingCharacters(in: .whitespaces)) else { return }
+                        store.recordScore(firing: firing, score: intValue, esScore: nil, pvScore: nil)
+                    }
                 ))
             }
             if let outcome = firing.outcome {
@@ -45,14 +54,16 @@ struct ResultsEntryView: View {
                     systemImage: outcome == .pass ? "checkmark.circle.fill" : "xmark.circle.fill"
                 )
                 .foregroundStyle(outcome == .pass ? Theme.pass : Theme.fail)
+            } else {
+                Text("Not yet entered").foregroundStyle(.secondary)
             }
         }
     }
 
-    private func scoreField(_ label: String, value: Binding<Int>) -> some View {
+    private func scoreField(_ label: String, text: Binding<String>) -> some View {
         HStack {
             Text(label)
-            TextField(label, value: value, format: .number)
+            TextField(label, text: text)
                 .frame(width: 60)
         }
     }

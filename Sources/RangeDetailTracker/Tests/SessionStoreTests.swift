@@ -60,6 +60,27 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(savedCount, 1)
     }
 
+    func testRecordScoreWithZeroClearsPendingAndFails() throws {
+        let (store, _) = makeStore(laneCount: 1)
+        store.confirmDraft()
+        XCTAssertTrue(store.hasPendingResults)
+        let firing = try XCTUnwrap(store.session.details.first?.firings.first)
+        // A genuine, explicitly-entered 0 (e.g. a range malfunction) must
+        // still clear the pending-results block, not leave it stuck forever.
+        store.recordScore(firing: firing, score: 0, esScore: nil, pvScore: nil)
+        XCTAssertEqual(firing.outcome, .fail)
+        XCTAssertFalse(store.hasPendingResults)
+    }
+
+    func testDetailSequenceNumbersBeforeAndAfterConfirm() throws {
+        let (store, _) = makeStore(laneCount: 1)
+        XCTAssertNil(store.currentDetailSequenceNumber)
+        XCTAssertEqual(store.nextDetailSequenceNumber, 1)
+        store.confirmDraft()
+        XCTAssertEqual(store.currentDetailSequenceNumber, 1)
+        XCTAssertEqual(store.nextDetailSequenceNumber, 2)
+    }
+
     static let allTests: [(String, (SessionStoreTests) -> () throws -> Void)] = [
         ("testConfirmDraftCreatesDetailWithFirings", testConfirmDraftCreatesDetailWithFirings),
         ("testRecordScoreSetsDerivedOutcome", testRecordScoreSetsDerivedOutcome),
@@ -67,5 +88,7 @@ final class SessionStoreTests: XCTestCase {
         ("testConfirmDraftClearsConsumedOverride", testConfirmDraftClearsConsumedOverride),
         ("testEditDraftLaneOverridesForNextConfirmOnly", testEditDraftLaneOverridesForNextConfirmOnly),
         ("testPersistIsCalledOnEveryMutation", testPersistIsCalledOnEveryMutation),
+        ("testRecordScoreWithZeroClearsPendingAndFails", testRecordScoreWithZeroClearsPendingAndFails),
+        ("testDetailSequenceNumbersBeforeAndAfterConfirm", testDetailSequenceNumbersBeforeAndAfterConfirm),
     ]
 }

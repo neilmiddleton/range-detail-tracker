@@ -5,7 +5,7 @@ struct DraftDetailPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Up Next")
+            SectionHeader(title: "Up Next — Detail \(store.nextDetailSequenceNumber)")
             let draft = store.displayedDraft
             if draft.firings.allSatisfy({ $0.cadetID == nil }) {
                 Text("No cadets eligible for the active lanes.")

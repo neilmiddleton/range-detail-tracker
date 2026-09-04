@@ -103,6 +103,16 @@ final class SessionStore {
         return latest.firings.sorted { $0.laneNumber < $1.laneNumber }
     }
 
+    /// Sequence number of the most recently confirmed detail (the one currently being scored), if any.
+    var currentDetailSequenceNumber: Int? {
+        session.details.map(\.sequenceNumber).max()
+    }
+
+    /// Sequence number the next confirmed detail will get.
+    var nextDetailSequenceNumber: Int {
+        session.details.count + 1
+    }
+
     func setOverride(cadetID: UUID, practiceID: UUID?) {
         guard let cadet = session.cadets.first(where: { $0.id == cadetID }) else { return }
         cadet.nextOverridePracticeID = practiceID

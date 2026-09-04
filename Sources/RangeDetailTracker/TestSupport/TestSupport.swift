@@ -34,6 +34,12 @@ func XCTAssertTrue(_ a: @autoclosure () -> Bool, _ message: String = "", file: S
     }
 }
 
+func XCTAssertFalse(_ a: @autoclosure () -> Bool, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    if a() {
+        TestRunner.shared.recordFailure("XCTAssertFalse failed. \(message)", file: file, line: line)
+    }
+}
+
 func XCTUnwrap<T>(_ a: T?, _ message: String = "", file: StaticString = #file, line: UInt = #line) throws -> T {
     guard let a else {
         TestRunner.shared.recordFailure("XCTUnwrap failed. \(message)", file: file, line: line)

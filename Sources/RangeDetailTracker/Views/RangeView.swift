@@ -9,9 +9,9 @@ struct RangeView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        LaneGridView(store: store)
                         ResultsEntryView(store: store)
                         DraftDetailPanelView(store: store)
-                        LaneGridView(store: store)
                     }
                     .padding()
                 }

@@ -42,13 +42,17 @@ struct DetailHistoryView: View {
     private func outcomeBox(cadet: Cadet, detail: Detail) -> some View {
         if let firing = detail.firings.first(where: { $0.cadetID == cadet.id }) {
             let practiceName = store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
-            Text(abbreviate(practiceName))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .frame(maxWidth: .infinity)
-                .background(boxColor(for: firing.outcome), in: RoundedRectangle(cornerRadius: 4))
+            VStack(spacing: 1) {
+                Text(abbreviate(practiceName))
+                    .font(.caption.weight(.semibold))
+                Text(scoreLabel(for: firing))
+                    .font(.caption2)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity)
+            .background(boxColor(for: firing.outcome), in: RoundedRectangle(cornerRadius: 4))
         } else {
             Text("")
         }
@@ -58,6 +62,18 @@ struct DetailHistoryView: View {
     /// -> "GP3") — the box only has room for that, not the full descriptive name.
     private func abbreviate(_ practiceName: String) -> String {
         practiceName.split(separator: " ").first.map(String.init) ?? practiceName
+    }
+
+    /// The score itself, alongside the pass/fail colour — a single score for
+    /// standard/points/completion practices, or "ES/PV" for zeroing.
+    private func scoreLabel(for firing: Firing) -> String {
+        if let score = firing.score {
+            return "\(score)"
+        }
+        if let esScore = firing.esScore, let pvScore = firing.pvScore {
+            return "\(esScore)/\(pvScore)"
+        }
+        return "–"
     }
 
     private func boxColor(for outcome: Outcome?) -> Color {

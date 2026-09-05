@@ -21,9 +21,10 @@ enum PracticeCatalog {
     private static let arEntries: [Entry] = [
         Entry(name: "AR1 Grouping (5.5m)", scoringType: .standard, defaultPassMark: 22),
         Entry(name: "AR1 Grouping (10m)", scoringType: .standard, defaultPassMark: 39),
-        // Sitting's (tighter) figure is used as the pass mark; Kneeling's is looser.
-        Entry(name: "AR2 Grouping (Sit/Kneel/Stand) (5.5m)", scoringType: .standard, defaultPassMark: 19),
-        Entry(name: "AR2 Grouping (Sit/Kneel/Stand) (10m)", scoringType: .standard, defaultPassMark: 35),
+        Entry(name: "AR2 Grouping (Sitting, 5.5m)", scoringType: .standard, defaultPassMark: 19),
+        Entry(name: "AR2 Grouping (Sitting, 10m)", scoringType: .standard, defaultPassMark: 35),
+        Entry(name: "AR2 Grouping (Kneeling, 5.5m)", scoringType: .standard, defaultPassMark: 38),
+        Entry(name: "AR2 Grouping (Kneeling, 10m)", scoringType: .standard, defaultPassMark: 69),
         // PV standard is "touching or within the inner scoring ring" — no plain mm figure given.
         Entry(name: "AR3 Zeroing (5.5m)", scoringType: .zeroing, defaultEsPassMark: 13),
         Entry(name: "AR3 Zeroing (10m)", scoringType: .zeroing, defaultEsPassMark: 23),
@@ -31,17 +32,18 @@ enum PracticeCatalog {
         Entry(name: "AR4.2 Deliberate (Sitting)", scoringType: .points, defaultPassMark: 25),
         Entry(name: "AR4.3 Deliberate (Kneeling)", scoringType: .points, defaultPassMark: 20),
         Entry(name: "AR4.4 Deliberate (Standing)", scoringType: .points, defaultPassMark: 15),
-        // AR5/AR6 score = hits achieved; ACP gives no fixed hit target (time should reduce each attempt).
+        // AR5/AR6 score = hits achieved. ACP gives no fixed hit target for Sighting (5.1);
+        // 5.2-5.4 and AR6 call for 5 hits, so 5 is the pass mark and more is still better.
         Entry(name: "AR5.1 Sighting (Standing)", scoringType: .points),
         Entry(name: "AR5.1 Sighting (Prone)", scoringType: .points),
-        Entry(name: "AR5.2 Advance & Shoot (Standing)", scoringType: .points),
-        Entry(name: "AR5.2 Advance & Shoot (Prone)", scoringType: .points),
-        Entry(name: "AR5.3 Advance & Shoot 100m (Standing)", scoringType: .points),
-        Entry(name: "AR5.3 Advance & Shoot 100m (Prone)", scoringType: .points),
-        Entry(name: "AR5.4 Advance & Shoot 200/300m (Standing)", scoringType: .points),
-        Entry(name: "AR5.4 Advance & Shoot 200/300m (Prone)", scoringType: .points),
-        Entry(name: "AR6 Target Sprint (Standing)", scoringType: .points),
-        Entry(name: "AR6 Target Sprint (Prone)", scoringType: .points),
+        Entry(name: "AR5.2 Advance & Shoot (Standing)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR5.2 Advance & Shoot (Prone)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR5.3 Advance & Shoot 100m (Standing)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR5.3 Advance & Shoot 100m (Prone)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR5.4 Advance & Shoot 200/300m (Standing)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR5.4 Advance & Shoot 200/300m (Prone)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR6 Target Sprint (Standing)", scoringType: .points, defaultPassMark: 5),
+        Entry(name: "AR6 Target Sprint (Prone)", scoringType: .points, defaultPassMark: 5),
         Entry(name: "AR7.1 Snap (Prone)", scoringType: .points, defaultPassMark: 30),
         Entry(name: "AR7.2 Rapid (Prone)", scoringType: .points, defaultPassMark: 25),
         Entry(name: "AR7.3 Snap (Sitting)", scoringType: .points, defaultPassMark: 25),
@@ -51,21 +53,16 @@ enum PracticeCatalog {
     ]
 
     private static let sbEntries: [Entry] = [
-        Entry(name: "SB1 Grouping (15x)", scoringType: .standard, defaultPassMark: 59),
-        Entry(name: "SB1 Grouping (20x)", scoringType: .standard, defaultPassMark: 78),
         Entry(name: "SB1 Grouping (25yd)", scoringType: .standard, defaultPassMark: 97),
         Entry(name: "SB1 Grouping (25m)", scoringType: .standard, defaultPassMark: 106),
         // Standard is a reduction relative to SB1's result, not a fixed figure.
         Entry(name: "SB2 Grouping Development", scoringType: .completion),
         // PV = ¼ of ES, rounded to the nearest mm.
-        Entry(name: "SB3 Zeroing (15x)", scoringType: .zeroing, defaultEsPassMark: 35, defaultPvPassMark: 9),
-        Entry(name: "SB3 Zeroing (20x)", scoringType: .zeroing, defaultEsPassMark: 46, defaultPvPassMark: 12),
         Entry(name: "SB3 Zeroing (25yd)", scoringType: .zeroing, defaultEsPassMark: 57, defaultPvPassMark: 14),
         Entry(name: "SB3 Zeroing (25m)", scoringType: .zeroing, defaultEsPassMark: 62, defaultPvPassMark: 16),
         Entry(name: "SB4 Deliberate", scoringType: .points, defaultPassMark: 140),
         Entry(name: "SB5.1 Snap", scoringType: .points, defaultPassMark: 35),
         Entry(name: "SB5.2 Rapid", scoringType: .points, defaultPassMark: 30),
-        Entry(name: "SB6 Deliberate (50x)", scoringType: .points, defaultPassMark: 150),
         // No standard given in ACP 18 for SB7 — set locally.
         Entry(name: "SB7 Deliberate (100yd)", scoringType: .points),
     ]
@@ -74,8 +71,11 @@ enum PracticeCatalog {
         Entry(name: "GP1 DCCT Grouping (25m)", scoringType: .completion),
         Entry(name: "GP2 Grouping (25x)", scoringType: .standard, defaultPassMark: 102),
         Entry(name: "GP2 Grouping (DCCT)", scoringType: .standard, defaultPassMark: 85),
-        Entry(name: "GP3 Grouping (Sitting)", scoringType: .standard, defaultPassMark: 90),
-        Entry(name: "GP3 Grouping (Kneeling)", scoringType: .standard, defaultPassMark: 180),
+        Entry(name: "GP3 Grouping (Sitting, 25x)", scoringType: .standard, defaultPassMark: 90),
+        Entry(name: "GP3 Grouping (Sitting, DCCT)", scoringType: .standard, defaultPassMark: 75),
+        Entry(name: "GP3 Grouping (Kneeling, 25x)", scoringType: .standard, defaultPassMark: 180),
+        Entry(name: "GP3 Grouping (Kneeling, DCCT)", scoringType: .standard, defaultPassMark: 150),
+        Entry(name: "GP4 DCCT Grouping Consolidation", scoringType: .completion),
         Entry(name: "GP5 Zeroing (25m)", scoringType: .zeroing, defaultEsPassMark: 60, defaultPvPassMark: 13),
         Entry(name: "GP8 DCCT Apply Fire (100m)", scoringType: .completion),
         Entry(name: "GP11 DCCT Apply Fire (200-300m)", scoringType: .completion),

@@ -12,6 +12,13 @@ enum ScoringRule {
             else { return nil }
             if esScore == 0 || pvScore == 0 { return .fail } // 0 means not actually fired, never a pass
             return (esScore <= esPassMark && pvScore <= pvPassMark) ? .pass : .fail
+        case .points:
+            guard let score, let passMark = practice.passMark else { return nil }
+            if score == 0 { return .fail } // 0 means not actually fired, never a pass
+            return score >= passMark ? .pass : .fail
+        case .completion:
+            guard let score else { return nil }
+            return score == 0 ? .fail : .pass // 0 means not actually fired, never a pass
         }
     }
 
@@ -20,7 +27,7 @@ enum ScoringRule {
     /// cadet's place in the fairness rotation, as if they hadn't fired it.
     static func isVoidAttempt(scoringType: ScoringType, score: Int?, esScore: Int?, pvScore: Int?) -> Bool {
         switch scoringType {
-        case .standard:
+        case .standard, .points, .completion:
             return score == 0
         case .zeroing:
             return esScore == 0 || pvScore == 0

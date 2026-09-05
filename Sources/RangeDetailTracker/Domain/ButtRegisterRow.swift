@@ -23,15 +23,15 @@ struct BestPracticeResult: Identifiable {
 
     var hasResult: Bool {
         switch scoringType {
-        case .standard: return score != nil
+        case .standard, .points, .completion: return score != nil
         case .zeroing: return esScore != nil && pvScore != nil
         }
     }
 
-    /// A single display value: the score for standard practices, "ES/PV" for zeroing.
+    /// A single display value: the score for standard/points/completion practices, "ES/PV" for zeroing.
     var displayValue: String {
         switch scoringType {
-        case .standard:
+        case .standard, .points, .completion:
             return score.map(String.init) ?? ""
         case .zeroing:
             guard let esScore, let pvScore else { return "" }

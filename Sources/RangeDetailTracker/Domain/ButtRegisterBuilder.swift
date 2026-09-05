@@ -24,9 +24,15 @@ enum ButtRegisterBuilder {
 
         switch practice.scoringType {
         case .standard:
+            // Lower is better (e.g. group size in mm).
             let best = firings.compactMap(\.score).min()
             let outcome = firings.first { $0.score == best }?.outcome
-            return BestPracticeResult(practiceID: practice.id, scoringType: .standard, score: best, esScore: nil, pvScore: nil, outcome: outcome)
+            return BestPracticeResult(practiceID: practice.id, scoringType: practice.scoringType, score: best, esScore: nil, pvScore: nil, outcome: outcome)
+        case .points, .completion:
+            // Higher is better (points out of an HPS, or just "did they complete it").
+            let best = firings.compactMap(\.score).max()
+            let outcome = firings.first { $0.score == best }?.outcome
+            return BestPracticeResult(practiceID: practice.id, scoringType: practice.scoringType, score: best, esScore: nil, pvScore: nil, outcome: outcome)
         case .zeroing:
             let zeroed = firings.filter { $0.esScore != nil && $0.pvScore != nil }
             let best = zeroed.min { lhs, rhs -> Bool in

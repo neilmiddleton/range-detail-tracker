@@ -62,6 +62,22 @@ final class ButtRegisterTests: XCTestCase {
         XCTAssertEqual(best?.outcome, .pass)
     }
 
+    func testReportsBestPointsScoreAsHighestNotLowest() throws {
+        let session = Session(laneCount: 1)
+        let practice = Practice(name: "AR4.1", order: 0, scoringType: .points, passMark: 30)
+        let cadet = Cadet(name: "Ahmed")
+        session.practices.append(practice)
+        session.cadets.append(cadet)
+        // Higher is better for points-scored practices, so 40 (not 20) is the best.
+        addFiring(to: session, sequenceNumber: 1, cadetID: cadet.id, practiceID: practice.id, score: 20, outcome: .fail)
+        addFiring(to: session, sequenceNumber: 2, cadetID: cadet.id, practiceID: practice.id, score: 40, outcome: .pass)
+
+        let rows = ButtRegisterBuilder.rows(for: session)
+        let best = rows.first?.bestResult(for: practice.id)
+        XCTAssertEqual(best?.score, 40)
+        XCTAssertEqual(best?.outcome, .pass)
+    }
+
     func testCadetWithNoFiringsHasNoResult() throws {
         let session = Session(laneCount: 1)
         let practice = Practice(name: "GP1", order: 0, scoringType: .standard, passMark: 20)
@@ -91,6 +107,7 @@ final class ButtRegisterTests: XCTestCase {
         ("testReportsCadetNameAndBestStandardScore", testReportsCadetNameAndBestStandardScore),
         ("testVoidZeroScoresAreExcludedFromBestScore", testVoidZeroScoresAreExcludedFromBestScore),
         ("testReportsBestZeroingPairByLowestCombinedScore", testReportsBestZeroingPairByLowestCombinedScore),
+        ("testReportsBestPointsScoreAsHighestNotLowest", testReportsBestPointsScoreAsHighestNotLowest),
         ("testCadetWithNoFiringsHasNoResult", testCadetWithNoFiringsHasNoResult),
         ("testCSVHasOneColumnPerPracticeAndEscapesCommas", testCSVHasOneColumnPerPracticeAndEscapesCommas),
     ]

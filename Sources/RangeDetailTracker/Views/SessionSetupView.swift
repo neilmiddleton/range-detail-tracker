@@ -2,8 +2,7 @@ import SwiftUI
 
 struct PracticeDraft: Identifiable {
     let id = UUID()
-    var name: String = ""
-    var scoringType: ScoringType = .standard
+    var catalogEntry: PracticeCatalog.Entry?
     var passMark: Int = 0
     var esPassMark: Int = 0
     var pvPassMark: Int = 0
@@ -93,21 +92,24 @@ struct SessionSetupView: View {
         }
     }
 
-    private let nameColumnWidth: CGFloat = 90
-    private let scoringColumnWidth: CGFloat = 130
-    private let markColumnWidth: CGFloat = 130
-    private let practiceNameMaxLength = 10
+    private let nameColumnWidth: CGFloat = 320
+    private let scoringColumnWidth: CGFloat = 90
+    private let markColumnWidth: CGFloat = 100
 
     private var practiceColumnHeader: some View {
         HStack(spacing: 12) {
             Image(systemName: "minus.circle.fill").opacity(0)
-            Text("Name").frame(width: nameColumnWidth, alignment: .leading)
+            Text("Practice").frame(width: nameColumnWidth, alignment: .leading)
             Text("Scoring").frame(width: scoringColumnWidth, alignment: .leading)
             Text("Pass Mark").frame(width: markColumnWidth, alignment: .leading)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
     }
+
+    private static let arCatalogEntries = PracticeCatalog.entries.filter { $0.name.hasPrefix("AR") }
+    private static let sbCatalogEntries = PracticeCatalog.entries.filter { $0.name.hasPrefix("SB") }
+    private static let gpCatalogEntries = PracticeCatalog.entries.filter { $0.name.hasPrefix("GP") }
 
     @ViewBuilder
     private func practiceRow(_ draft: Binding<PracticeDraft>) -> some View {
@@ -121,25 +123,45 @@ struct SessionSetupView: View {
             .buttonStyle(.plain)
             .disabled(practiceDrafts.count <= 1)
 
-            TextField("e.g. GP1", text: draft.name)
-                .labelsHidden()
-                .frame(width: nameColumnWidth)
-                .onChange(of: draft.wrappedValue.name) { _, newValue in
-                    if newValue.count > practiceNameMaxLength {
-                        draft.wrappedValue.name = String(newValue.prefix(practiceNameMaxLength))
+            Picker("Practice", selection: draft.catalogEntry) {
+                Text("— Select a practice —").tag(PracticeCatalog.Entry?.none)
+                Section("Air Rifle (AR)") {
+                    ForEach(Self.arCatalogEntries) { entry in
+                        Text(entry.name).tag(Optional(entry))
                     }
                 }
-            Picker("Scoring", selection: draft.scoringType) {
-                Text("Standard").tag(ScoringType.standard)
-                Text("Zeroing").tag(ScoringType.zeroing)
+                Section("Small Bore (SB)") {
+                    ForEach(Self.sbCatalogEntries) { entry in
+                        Text(entry.name).tag(Optional(entry))
+                    }
+                }
+                Section("GP Rifle — indoor/DCCT") {
+                    ForEach(Self.gpCatalogEntries) { entry in
+                        Text(entry.name).tag(Optional(entry))
+                    }
+                }
             }
             .labelsHidden()
-            .frame(width: scoringColumnWidth)
-            if draft.wrappedValue.scoringType == .standard {
+            .frame(width: nameColumnWidth)
+            .onChange(of: draft.wrappedValue.catalogEntry) { _, newEntry in
+                // Pre-fill the ACP-specified default for the chosen practice — still editable,
+                // since a local SOP may set a different standard.
+                draft.wrappedValue.passMark = newEntry?.defaultPassMark ?? 0
+                draft.wrappedValue.esPassMark = newEntry?.defaultEsPassMark ?? 0
+                draft.wrappedValue.pvPassMark = newEntry?.defaultPvPassMark ?? 0
+            }
+
+            Text(scoringLabel(for: draft.wrappedValue.catalogEntry?.scoringType))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: scoringColumnWidth, alignment: .leading)
+
+            switch draft.wrappedValue.catalogEntry?.scoringType {
+            case .standard, .points:
                 TextField("Pass mark", value: draft.passMark, format: .number)
                     .labelsHidden()
                     .frame(width: markColumnWidth)
-            } else {
+            case .zeroing:
                 HStack(spacing: 6) {
                     Text("ES").foregroundStyle(.secondary)
                     TextField("ES", value: draft.esPassMark, format: .number)
@@ -150,12 +172,24 @@ struct SessionSetupView: View {
                         .labelsHidden()
                         .frame(width: markColumnWidth)
                 }
+            case .completion, nil:
+                Text("—").foregroundStyle(.secondary).frame(width: markColumnWidth, alignment: .leading)
             }
         }
     }
 
+    private func scoringLabel(for scoringType: ScoringType?) -> String {
+        switch scoringType {
+        case .standard: "Standard"
+        case .zeroing: "Zeroing"
+        case .points: "Points"
+        case .completion: "Completion"
+        case nil: ""
+        }
+    }
+
     private var isValid: Bool {
-        !practiceDrafts.isEmpty && practiceDrafts.allSatisfy { !$0.name.isEmpty } && !cadetNames.isEmpty
+        !practiceDrafts.isEmpty && practiceDrafts.allSatisfy { $0.catalogEntry != nil } && !cadetNames.isEmpty
     }
 
     private var cadetNames: [String] {
@@ -171,13 +205,15 @@ struct SessionSetupView: View {
             session.lanes.append(Lane(number: number))
         }
         for (index, draft) in practiceDrafts.enumerated() {
+            guard let catalogEntry = draft.catalogEntry else { continue }
+            let scoringType = catalogEntry.scoringType
             let practice = Practice(
-                name: draft.name,
+                name: catalogEntry.name,
                 order: index,
-                scoringType: draft.scoringType,
-                passMark: draft.scoringType == .standard ? draft.passMark : nil,
-                esPassMark: draft.scoringType == .zeroing ? draft.esPassMark : nil,
-                pvPassMark: draft.scoringType == .zeroing ? draft.pvPassMark : nil
+                scoringType: scoringType,
+                passMark: (scoringType == .standard || scoringType == .points) ? draft.passMark : nil,
+                esPassMark: scoringType == .zeroing ? draft.esPassMark : nil,
+                pvPassMark: scoringType == .zeroing ? draft.pvPassMark : nil
             )
             session.practices.append(practice)
         }

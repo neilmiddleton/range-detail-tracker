@@ -45,5 +45,11 @@ func runAllTests(filter: String?) -> Never {
         }
     }
 
+    if matches("PracticeCatalogTests") {
+        for (name, method) in PracticeCatalogTests.allTests {
+            TestRunner.shared.run(name) { try method(PracticeCatalogTests())() }
+        }
+    }
+
     TestRunner.shared.finish()
 }

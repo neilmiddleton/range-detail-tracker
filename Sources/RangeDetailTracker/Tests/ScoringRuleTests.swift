@@ -9,6 +9,14 @@ final class ScoringRuleTests: XCTestCase {
         PracticeSnapshot(id: UUID(), name: "Zeroing", order: 0, scoringType: .zeroing, passMark: nil, esPassMark: esPassMark, pvPassMark: pvPassMark)
     }
 
+    func pointsPractice(passMark: Int) -> PracticeSnapshot {
+        PracticeSnapshot(id: UUID(), name: "AR4.1", order: 0, scoringType: .points, passMark: passMark, esPassMark: nil, pvPassMark: nil)
+    }
+
+    func completionPractice() -> PracticeSnapshot {
+        PracticeSnapshot(id: UUID(), name: "GP1", order: 0, scoringType: .completion, passMark: nil, esPassMark: nil, pvPassMark: nil)
+    }
+
     func testStandardPassesAtExactPassMark() {
         let practice = standardPractice(passMark: 20)
         XCTAssertEqual(ScoringRule.outcome(for: practice, score: 20, esScore: nil, pvScore: nil), .pass)
@@ -57,6 +65,35 @@ final class ScoringRuleTests: XCTestCase {
         XCTAssertFalse(ScoringRule.isVoidAttempt(scoringType: .zeroing, score: nil, esScore: 5, pvScore: 5))
     }
 
+    func testPointsPassesAtOrAbovePassMark() {
+        let practice = pointsPractice(passMark: 30)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 30, esScore: nil, pvScore: nil), .pass)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 35, esScore: nil, pvScore: nil), .pass)
+    }
+
+    func testPointsFailsBelowPassMark() {
+        let practice = pointsPractice(passMark: 30)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 29, esScore: nil, pvScore: nil), .fail)
+    }
+
+    func testPointsScoreOfZeroIsAlwaysFail() {
+        let practice = pointsPractice(passMark: 30)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 0, esScore: nil, pvScore: nil), .fail)
+        XCTAssertTrue(ScoringRule.isVoidAttempt(scoringType: .points, score: 0, esScore: nil, pvScore: nil))
+    }
+
+    func testCompletionPassesOnAnyNonZeroScore() {
+        let practice = completionPractice()
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 1, esScore: nil, pvScore: nil), .pass)
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 100, esScore: nil, pvScore: nil), .pass)
+    }
+
+    func testCompletionScoreOfZeroIsAlwaysFail() {
+        let practice = completionPractice()
+        XCTAssertEqual(ScoringRule.outcome(for: practice, score: 0, esScore: nil, pvScore: nil), .fail)
+        XCTAssertTrue(ScoringRule.isVoidAttempt(scoringType: .completion, score: 0, esScore: nil, pvScore: nil))
+    }
+
     static let allTests: [(String, (ScoringRuleTests) -> () throws -> Void)] = [
         ("testStandardPassesAtExactPassMark", testStandardPassesAtExactPassMark),
         ("testStandardFailsOneAbovePassMark", testStandardFailsOneAbovePassMark),
@@ -67,5 +104,10 @@ final class ScoringRuleTests: XCTestCase {
         ("testZeroingEitherScoreOfZeroIsAlwaysFail", testZeroingEitherScoreOfZeroIsAlwaysFail),
         ("testStandardZeroScoreIsAVoidAttempt", testStandardZeroScoreIsAVoidAttempt),
         ("testZeroingEitherZeroScoreIsAVoidAttempt", testZeroingEitherZeroScoreIsAVoidAttempt),
+        ("testPointsPassesAtOrAbovePassMark", testPointsPassesAtOrAbovePassMark),
+        ("testPointsFailsBelowPassMark", testPointsFailsBelowPassMark),
+        ("testPointsScoreOfZeroIsAlwaysFail", testPointsScoreOfZeroIsAlwaysFail),
+        ("testCompletionPassesOnAnyNonZeroScore", testCompletionPassesOnAnyNonZeroScore),
+        ("testCompletionScoreOfZeroIsAlwaysFail", testCompletionScoreOfZeroIsAlwaysFail),
     ]
 }

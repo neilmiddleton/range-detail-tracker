@@ -9,15 +9,19 @@ struct LanePanelView: View {
     private let laneWidth: CGFloat = 220
     private let laneCardMinHeight: CGFloat = 210
 
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: laneWidth, maximum: laneWidth), spacing: 12, alignment: .top)]
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Lanes")
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(store.session.lanes.sorted { $0.number < $1.number }) { lane in
-                        laneCard(lane)
-                            .frame(width: laneWidth)
-                    }
+            // Lanes read left-to-right like firing points on the range, wrapping
+            // onto a new row instead of requiring horizontal scrolling once
+            // there are more than fit across the window.
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                ForEach(store.session.lanes.sorted { $0.number < $1.number }) { lane in
+                    laneCard(lane)
                 }
             }
             confirmBar

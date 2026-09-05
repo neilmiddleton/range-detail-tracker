@@ -63,8 +63,6 @@ enum PracticeCatalog {
         Entry(name: "SB4 Deliberate", scoringType: .points, defaultPassMark: 140),
         Entry(name: "SB5.1 Snap", scoringType: .points, defaultPassMark: 35),
         Entry(name: "SB5.2 Rapid", scoringType: .points, defaultPassMark: 30),
-        // No standard given in ACP 18 for SB7 — set locally.
-        Entry(name: "SB7 Deliberate (100yd)", scoringType: .points),
     ]
 
     private static let gpEntries: [Entry] = [

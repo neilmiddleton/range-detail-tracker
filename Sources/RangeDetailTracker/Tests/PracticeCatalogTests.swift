@@ -60,6 +60,11 @@ final class PracticeCatalogTests: XCTestCase {
         XCTAssertFalse(names.contains { $0.hasPrefix("SB6") })
     }
 
+    func testSB7IsRemoved() {
+        let names = Set(PracticeCatalog.entries.map(\.name))
+        XCTAssertFalse(names.contains { $0.hasPrefix("SB7") })
+    }
+
     func testDistanceVariantsHaveTheirOwnACPDefault() {
         func entry(_ name: String) -> PracticeCatalog.Entry? {
             PracticeCatalog.entries.first { $0.name == name }
@@ -83,6 +88,7 @@ final class PracticeCatalogTests: XCTestCase {
         ("testAR5And6HitsTargetIsFiveAndNotOnSighting", testAR5And6HitsTargetIsFiveAndNotOnSighting),
         ("testSB1And3OnlyKeep25ydAnd25mDistances", testSB1And3OnlyKeep25ydAnd25mDistances),
         ("testSB6IsRemoved", testSB6IsRemoved),
+        ("testSB7IsRemoved", testSB7IsRemoved),
         ("testDistanceVariantsHaveTheirOwnACPDefault", testDistanceVariantsHaveTheirOwnACPDefault),
     ]
 }

@@ -18,7 +18,10 @@ struct SessionSetupView: View {
 
     var body: some View {
         if let store {
-            RangeView(store: store)
+            RangeView(store: store) {
+                self.store = nil
+                startingFresh = true
+            }
         } else if let resumableSession, !startingFresh {
             VStack(spacing: 16) {
                 SectionHeader(title: "A previous session was found")

@@ -29,7 +29,6 @@ struct DetailHistoryView: View {
                 .frame(minHeight: CGFloat(cadets.count) * 32 + 40)
             }
         }
-        .padding()
     }
 
     /// A rough per-character estimate so the column never clips a cadet's name,
@@ -43,7 +42,7 @@ struct DetailHistoryView: View {
     private func outcomeBox(cadet: Cadet, detail: Detail) -> some View {
         if let firing = detail.firings.first(where: { $0.cadetID == cadet.id }) {
             let practiceName = store.session.practices.first { $0.id == firing.practiceID }?.name ?? "?"
-            Text(practiceName)
+            Text(abbreviate(practiceName))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 6)
@@ -53,6 +52,12 @@ struct DetailHistoryView: View {
         } else {
             Text("")
         }
+    }
+
+    /// Catalog practice names lead with their code (e.g. "AR4.2", "GP3 Grouping (Sitting, DCCT)"
+    /// -> "GP3") — the box only has room for that, not the full descriptive name.
+    private func abbreviate(_ practiceName: String) -> String {
+        practiceName.split(separator: " ").first.map(String.init) ?? practiceName
     }
 
     private func boxColor(for outcome: Outcome?) -> Color {

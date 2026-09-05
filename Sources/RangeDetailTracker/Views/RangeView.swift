@@ -32,7 +32,6 @@ struct RangeView: View {
                     RosterPanelView(store: store)
                     ScrollView {
                         DetailHistoryView(store: store)
-                            .padding(.horizontal)
                     }
                 }
                 .padding()

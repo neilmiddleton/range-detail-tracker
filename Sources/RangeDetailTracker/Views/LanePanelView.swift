@@ -7,6 +7,7 @@ struct LanePanelView: View {
     @Bindable var store: SessionStore
 
     private let laneWidth: CGFloat = 220
+    private let laneCardMinHeight: CGFloat = 210
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -44,9 +45,10 @@ struct LanePanelView: View {
             currentSection(currentFiring)
             Divider()
             nextSection(lane: lane, draftFiring: draftFiring)
+            Spacer(minLength: 0)
         }
         .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: laneCardMinHeight, alignment: .topLeading)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)

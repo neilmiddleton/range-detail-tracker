@@ -65,7 +65,15 @@ struct LanePanelView: View {
             if let firing {
                 let cadetName = store.session.cadets.first { $0.id == firing.cadetID }?.name ?? "?"
                 let practice = store.session.practices.first { $0.id == firing.practiceID }
-                Text("\(cadetName) — \(practice?.name ?? "?")")
+                Text(cadetName)
+                Text(practice?.name ?? "?")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let markLabel = passMarkLabel(for: practice) {
+                    Text(markLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 scoreFields(firing: firing, practice: practice)
                 if let outcome = firing.outcome {
                     Label(
@@ -80,6 +88,24 @@ struct LanePanelView: View {
             } else {
                 Text("Idle").foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// The standard a cadet needs to meet on this practice, if it has a fixed one.
+    private func passMarkLabel(for practice: Practice?) -> String? {
+        guard let practice else { return nil }
+        switch practice.scoringType {
+        case .standard:
+            guard let mark = practice.passMark else { return nil }
+            return "Pass ≤ \(mark)"
+        case .points:
+            guard let mark = practice.passMark else { return nil }
+            return "Pass ≥ \(mark)"
+        case .zeroing:
+            guard let es = practice.esPassMark, let pv = practice.pvPassMark else { return nil }
+            return "ES ≤ \(es) / PV ≤ \(pv)"
+        case .completion:
+            return nil
         }
     }
 
